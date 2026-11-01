@@ -1,0 +1,72 @@
+tables:
+  products:
+    description: This table represents products available for sale, with 40 rows corresponding
+      to individual products.
+    requires_finding: null
+    columns:
+      product_id:
+        type: TEXT
+        sensitivity: internal
+        description: Unique identifier for each product, coded as TEXT.
+      product_name:
+        type: TEXT
+        sensitivity: internal
+        description: Name of the product, coded as TEXT.
+      category:
+        type: TEXT
+        sensitivity: internal
+        description: Category to which the product belongs, coded as TEXT.
+      unit_price:
+        type: FLOAT
+        sensitivity: internal
+        description: Price of the product per unit, measured in currency (FLOAT).
+  sales:
+    description: Table representing sales transactions across various stores over
+      a period of time. sale_date covers 2024-09-01 to 2025-09-30.
+    requires_finding: null
+    columns:
+      sale_date:
+        type: TEXT
+        sensitivity: internal
+        description: Date of the sale in YYYY-MM-DD format.
+      store_id:
+        type: TEXT
+        sensitivity: internal
+        description: Identifier for the store where the sale occurred.
+      product_id:
+        type: TEXT
+        sensitivity: internal
+        description: Identifier for the product sold.
+      units_sold:
+        type: BIGINT
+        sensitivity: internal
+        description: Number of units sold in the transaction.
+      revenue_inr:
+        type: FLOAT
+        sensitivity: internal
+        description: Total revenue generated from the sale in Indian Rupees (INR).
+      customer_phone:
+        type: TEXT
+        sensitivity: confidential
+        description: Customer's phone number (sensitive information).
+  stores:
+    description: Table stores represents individual store locations with their details,
+      covering the time span since their opening.
+    requires_finding: null
+    columns:
+      store_id:
+        type: TEXT
+        sensitivity: internal
+        description: Unique identifier for each store, alphanumeric code.
+      city:
+        type: TEXT
+        sensitivity: internal
+        description: City where the store is located, text.
+      manager_email:
+        type: TEXT
+        sensitivity: confidential
+        description: Email address of the store manager, text.
+      opened:
+        type: TEXT
+        sensitivity: internal
+        description: Date when the store was opened, format YYYY-MM-DD.

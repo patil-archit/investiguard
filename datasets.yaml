@@ -1,0 +1,140 @@
+# Datasets the Studio can switch between. Managed by the Data tab; editable by hand.
+inventory:
+  label: Plant stores inventory movements (SAP, FY2020-25)
+  url: sqlite:///data/inventory.db
+  catalog: catalog_inventory.yaml
+  problem: Total amount in lc (sum of inventory_movements.amount_in_lc) fell by 16%
+    in Apr 2024 – Mar 2025 (2024-04-01 to 2025-03-31) compared with Apr 2023 – Mar
+    2024 (2023-04-01 to 2024-03-31), from ₹113.5 crore to ₹95.1 crore, using inventory_movements.month_year
+    as the date. Find the root cause.
+  currency: INR
+  sample_questions:
+  - What is the total consumption value of materials issued to production orders for
+    the financial year 2023-2024?
+  - Which material category had the highest total quantity moved in the last quarter
+    of 2023?
+  - How many goods movements were recorded for cost centers in the financial year
+    2022-2023?
+  - What is the average unit price of materials issued to projects in the financial
+    year 2024-2025?
+  - Which top 5 materials had the highest consumption value in the financial year
+    2023-2024?
+  - What was the total quantity of materials issued to assets in the first half of
+    the financial year 2024-2025 compared to the same period in the previous year?
+  - How many goods movements were made in each consuming plant area for the financial
+    year 2023-2024?
+  - What is the total consumption value of materials categorized as fuel for the financial
+    year 2022-2023?
+  suggested_problems:
+  - Total amount in lc (sum of inventory_movements.amount_in_lc) fell by 16% in Apr
+    2024 – Mar 2025 (2024-04-01 to 2025-03-31) compared with Apr 2023 – Mar 2024 (2023-04-01
+    to 2024-03-31), from ₹113.5 crore to ₹95.1 crore, using inventory_movements.month_year
+    as the date. Find the root cause.
+  - Total quantity (sum of inventory_movements.quantity) fell by 7% in Apr 2024 –
+    Mar 2025 (2024-04-01 to 2025-03-31) compared with Apr 2023 – Mar 2024 (2023-04-01
+    to 2024-03-31), from 7,697,009 to 7,151,939, using inventory_movements.month_year
+    as the date. Find the root cause.
+  - Total quantity (sum of inventory_movements.quantity) fell by 29% in Jan 2025 –
+    Mar 2025 (2025-01-01 to 2025-03-31) compared with Oct 2024 – Dec 2024 (2024-10-01
+    to 2024-12-31), from 1,969,904 to 1,391,627, using inventory_movements.month_year
+    as the date. Find the root cause.
+demo:
+  label: Demo e-commerce (synthetic, injected payment incident)
+  url: sqlite:///demo_data/demo.db
+  catalog: catalog.yaml
+  currency: INR
+  problem: Revenue fell by about 20% in September 2026 compared with August 2026.
+    Find the root cause.
+  sample_questions:
+  - What was completed revenue by region in August and September 2026?
+  - What share of payments failed each week since August 2026?
+  suggested_problems:
+  - Revenue fell by about 20% in September 2026 compared with August 2026. Find the
+    root cause.
+retail_chain:
+  label: Retail chain sales (Excel sample)
+  url: sqlite:///data/datasets/retail_chain.db
+  catalog: catalogs/retail_chain.yaml
+  currency: INR
+  problem: Total revenue inr (sum of sales.revenue_inr) fell by 7% in Jul 2025 – Sep
+    2025 (2025-07-01 to 2025-09-30) compared with Apr 2025 – Jun 2025 (2025-04-01
+    to 2025-06-30), from ₹2.3 crore to ₹2.1 crore, using sales.sale_date as the date.
+    Find the root cause.
+  suggested_problems:
+  - Total revenue inr (sum of sales.revenue_inr) fell by 7% in Jul 2025 – Sep 2025
+    (2025-07-01 to 2025-09-30) compared with Apr 2025 – Jun 2025 (2025-04-01 to 2025-06-30),
+    from ₹2.3 crore to ₹2.1 crore, using sales.sale_date as the date. Find the root
+    cause.
+  - Total units sold (sum of sales.units_sold) fell by 7% in Jul 2025 – Sep 2025 (2025-07-01
+    to 2025-09-30) compared with Apr 2025 – Jun 2025 (2025-04-01 to 2025-06-30), from
+    180,987 to 168,843, using sales.sale_date as the date. Find the root cause.
+  - Total units sold (sum of sales.units_sold) fell by 8% in Sep 2025 (2025-09-01
+    to 2025-09-30) compared with Aug 2025 (2025-08-01 to 2025-08-31), from 55,931
+    to 51,627, using sales.sale_date as the date. Find the root cause.
+  sample_questions:
+  - What is the total revenue generated from sales in each month for the year 2025?
+  - Which products generated the highest revenue in the last quarter of 2024?
+  - How many units of each product were sold in the city of Mumbai during September
+    2025?
+  - What is the average unit price of products in each category?
+  - Which store had the highest number of sales transactions in 2024?
+  - How does the total revenue in September 2025 compare to the total revenue in September
+    2024?
+  - What are the top 5 products by units sold in the year 2025?
+  - How many stores were opened in each city since the beginning of 2024?
+consumption_report_fy2020_2025:
+  label: Consumption Report FY2020-2025
+  url: sqlite:///data/datasets/consumption_report_fy2020_2025.db
+  catalog: catalogs/consumption_report_fy2020_2025.yaml
+  currency: INR
+  problem: Describe a metric that rose or fell between two periods, then ask for the
+    root cause.
+  suggested_problems: []
+  sample_questions:
+  - What is the total consumption amount for each material category from fiscal year
+    2020 to 2025?
+  - Which materials had the highest consumption in fiscal year 2021?
+  - How does the total consumption amount for materials in fiscal year 2022 compare
+    to fiscal year 2023?
+  - What is the monthly consumption trend for the top 5 materials in terms of quantity
+    consumed during fiscal year 2022?
+  - How many unique materials were consumed in each fiscal year from 2020 to 2023?
+  - What is the average reorder quantity for materials across different categories?
+  - Which month in fiscal year 2021 had the highest total consumption amount?
+  - What is the total quantity consumed for each material in the last quarter of fiscal
+    year 2023?
+procurement_details:
+  label: Procurement details
+  url: sqlite:///data/datasets/procurement_details.db
+  catalog: catalogs/procurement_details.yaml
+  currency: INR
+  problem: Total quantity (sum of procurement_details.quantity) rose by 11% in Nov
+    2024 – Oct 2025 (2024-11-01 to 2025-10-31) compared with Nov 2023 – Oct 2024 (2023-11-01
+    to 2024-10-31), from 7,787,732 to 8,629,852, using procurement_details.doc_date
+    as the date. Find the root cause.
+  suggested_problems:
+  - Total quantity (sum of procurement_details.quantity) rose by 11% in Nov 2024 –
+    Oct 2025 (2024-11-01 to 2025-10-31) compared with Nov 2023 – Oct 2024 (2023-11-01
+    to 2024-10-31), from 7,787,732 to 8,629,852, using procurement_details.doc_date
+    as the date. Find the root cause.
+  - Total net value (sum of procurement_details.net_value) fell by 7% in Nov 2024
+    – Oct 2025 (2024-11-01 to 2025-10-31) compared with Nov 2023 – Oct 2024 (2023-11-01
+    to 2024-10-31), from ₹166.6 crore to ₹154.9 crore, using procurement_details.doc_date
+    as the date. Find the root cause.
+  - Total quantity (sum of procurement_details.quantity) rose by 18% in Aug 2025 –
+    Oct 2025 (2025-08-01 to 2025-10-31) compared with May 2025 – Jul 2025 (2025-05-01
+    to 2025-07-31), from 593,337 to 697,695, using procurement_details.doc_date as
+    the date. Find the root cause.
+  sample_questions:
+  - What is the total net value of procurement transactions for each year from 2019
+    to 2025?
+  - Who are the top 5 vendors by total net value of materials supplied in 2023?
+  - How does the total quantity procured in the first half of 2024 compare to the
+    second half of the same year?
+  - What is the breakdown of procurement transactions by procurement organization
+    type for the year 2022?
+  - How many unique procurement documents were created in each month of 2021?
+  - What is the average net price of materials procured in 2020 compared to 2021?
+  - Which material had the highest total net value in procurement transactions during
+    the year 2023?
+  - What is the total quantity of items procured in each currency for the year 2022?

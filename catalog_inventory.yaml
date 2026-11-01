@@ -1,0 +1,31 @@
+tables:
+  inventory_movements:
+    description: >-
+      One row per SAP goods movement out of plant stores, Apr 2020 - Mar 2025. Consumption value =
+      SUM(amount_in_lc) (INR). movement_type 261 = issue to production order, 262 = reversal of 261
+      (negative), 201 = issue to cost center, 202 = reversal, 241/242 = issue to asset / reversal,
+      221 = issue to project. Dates are ISO text 'YYYY-MM-DD'. Latest financial year is '2024-2025'.
+    requires_finding: null
+    columns:
+      material: {type: TEXT, sensitivity: internal, description: SAP material code}
+      material_description: {type: TEXT, sensitivity: internal, description: material name}
+      uom: {type: TEXT, sensitivity: internal, description: "unit of measure (EA, KG, MT, L, ...)"}
+      quantity: {type: FLOAT, sensitivity: internal, description: "quantity moved in uom, negative for reversals"}
+      mrp: {type: TEXT, sensitivity: internal, description: "MRP type (VB = reorder-point planning, ND = no planning)"}
+      rol: {type: FLOAT, sensitivity: internal, description: re-order level}
+      roq: {type: FLOAT, sensitivity: internal, description: re-order quantity}
+      month_year: {type: TEXT, sensitivity: internal, description: same as posting_date}
+      fy2020_2025: {type: TEXT, sensitivity: internal, description: "financial year label, e.g. '2023-2024' (Apr-Mar)"}
+      area: {type: TEXT, sensitivity: internal, description: consuming plant area / department}
+      category: {type: TEXT, sensitivity: internal, description: "material category, e.g. fuel, Automation, BU-1"}
+      group_name: {type: TEXT, sensitivity: internal, description: "material group, e.g. Stores & Spares, Fuel"}
+      posting_date: {type: TEXT, sensitivity: internal, description: posting date YYYY-MM-DD}
+      movement_type: {type: BIGINT, sensitivity: internal, description: SAP movement type code}
+      material_document: {type: BIGINT, sensitivity: confidential, description: SAP document number}
+      cost_center: {type: FLOAT, sensitivity: confidential, description: accounting cost center}
+      amount_in_lc: {type: FLOAT, sensitivity: internal, description: value in INR (local currency)}
+      order_no: {type: TEXT, sensitivity: confidential, description: production / maintenance order number}
+      reference: {type: TEXT, sensitivity: confidential, description: reference document number}
+      unit_price: {type: FLOAT, sensitivity: internal, description: amount_in_lc / quantity}
+      eda_error: {type: BOOLEAN, sensitivity: internal, description: data-cleaning flag (always false)}
+      roq_rol_ratio: {type: FLOAT, sensitivity: internal, description: roq / rol}

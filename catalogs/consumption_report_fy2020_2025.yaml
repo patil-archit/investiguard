@@ -1,0 +1,892 @@
+tables:
+  s_s_consumption_fy2020_2025:
+    description: This table records consumption data from fiscal year 2020 to 2025,
+      with each row representing a unique material and its associated consumption
+      metrics over time.
+    requires_finding: null
+    columns:
+      s_s_consumption_fy2020_2025:
+        type: TEXT
+        sensitivity: internal
+        description: Material identifier codes.
+      col_2:
+        type: TEXT
+        sensitivity: internal
+        description: Description of the material.
+      col_3:
+        type: TEXT
+        sensitivity: internal
+        description: Group category of the material.
+      col_4:
+        type: TEXT
+        sensitivity: internal
+        description: Unit of Measure (UOM) for the quantity.
+      col_5:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year and date, with quantity sum.
+      col_6:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in local currency (LC) for the corresponding period.
+      col_7:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_8:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_9:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_10:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_11:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_12:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_13:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_14:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_15:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_16:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_17:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_18:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_19:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_20:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_21:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_22:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_23:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_24:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_25:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_26:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_27:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity sum.
+      col_28:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_29:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year and date, with quantity count.
+      col_30:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the corresponding period.
+      col_31:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_32:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_33:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_34:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_35:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_36:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_37:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_38:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_39:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_40:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_41:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_42:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_43:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_44:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_45:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_46:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_47:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_48:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_49:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_50:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_51:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_52:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_53:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year and date, with quantity count.
+      col_54:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the corresponding period.
+      col_55:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_56:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_57:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_58:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_59:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_60:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_61:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_62:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_63:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_64:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_65:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_66:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_67:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_68:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_69:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_70:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_71:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_72:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_73:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_74:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_75:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_76:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_77:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year and date, with quantity count.
+      col_78:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the corresponding period.
+      col_79:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_80:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_81:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_82:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_83:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_84:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_85:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_86:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_87:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_88:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_89:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_90:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_91:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_92:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_93:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_94:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_95:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_96:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_97:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_98:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_99:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_100:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_101:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year and date, with quantity count.
+      col_102:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the corresponding period.
+      col_103:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_104:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_105:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_106:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_107:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_108:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_109:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_110:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_111:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_112:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_113:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_114:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_115:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_116:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_117:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_118:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_119:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_120:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_121:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_122:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+      col_123:
+        type: TEXT
+        sensitivity: internal
+        description: Date for the next period, with quantity count.
+      col_124:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amount in LC for the next period.
+  s_s_consumption_fy2020_2025data:
+    description: This table represents consumption data for materials from fiscal
+      year 2020 to 2025, with each row corresponding to a specific material entry.
+    requires_finding: null
+    columns:
+      s_s_consumption_fy2020_2023:
+        type: TEXT
+        sensitivity: internal
+        description: List of materials with their codes.
+      col_2:
+        type: TEXT
+        sensitivity: internal
+        description: Description of the materials.
+      col_3:
+        type: TEXT
+        sensitivity: internal
+        description: Unit of Measure (UOM) for the materials.
+      col_4:
+        type: TEXT
+        sensitivity: internal
+        description: Quantity of materials consumed.
+      col_5:
+        type: TEXT
+        sensitivity: internal
+        description: Material Requirement Planning (MRP) code.
+      col_6:
+        type: TEXT
+        sensitivity: internal
+        description: Reorder Level (ROL) for materials.
+      col_7:
+        type: TEXT
+        sensitivity: internal
+        description: Reorder Quantity (ROQ) for materials.
+      col_8:
+        type: TEXT
+        sensitivity: internal
+        description: Date of consumption.
+      col_9:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year period.
+      col_10:
+        type: TEXT
+        sensitivity: internal
+        description: Area where the materials are used.
+      col_11:
+        type: TEXT
+        sensitivity: internal
+        description: Category of the materials.
+      col_12:
+        type: TEXT
+        sensitivity: internal
+        description: Group classification of the materials.
+      col_13:
+        type: TEXT
+        sensitivity: internal
+        description: Duplicate date of consumption.
+      col_14:
+        type: TEXT
+        sensitivity: internal
+        description: Movement Type code indicating the type of transaction.
+      col_15:
+        type: TEXT
+        sensitivity: internal
+        description: Material Document number for tracking.
+      col_16:
+        type: TEXT
+        sensitivity: internal
+        description: Cost Center associated with the material.
+      col_17:
+        type: TEXT
+        sensitivity: internal
+        description: Amount in Local Currency (LC) for the transaction.
+      col_18:
+        type: TEXT
+        sensitivity: internal
+        description: Order number associated with the material.
+      col_19:
+        type: TEXT
+        sensitivity: internal
+        description: Reference number for tracking.
+  s_s_consumption_month_wise:
+    description: Monthly consumption data for materials from FY 2020 to FY 2023.
+    requires_finding: null
+    columns:
+      s_s_consumption_fy2020_2023:
+        type: TEXT
+        sensitivity: internal
+        description: List of material codes.
+      col_2:
+        type: TEXT
+        sensitivity: internal
+        description: Material descriptions.
+      col_3:
+        type: TEXT
+        sensitivity: internal
+        description: Group classification of materials.
+      col_4:
+        type: TEXT
+        sensitivity: internal
+        description: Unit of Measure (UOM) for quantities.
+      col_5:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year 2020-2021 data including date and quantity.
+      col_6:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in local currency (LC) for FY 2020-2021.
+      col_7:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for May 2020 including date and quantity.
+      col_8:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for May 2020.
+      col_9:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for June 2020 including date and quantity.
+      col_10:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for June 2020.
+      col_11:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for July 2020 including date and quantity.
+      col_12:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for July 2020.
+      col_13:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for August 2020 including date and quantity.
+      col_14:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for August 2020.
+      col_15:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for September 2020 including date and quantity.
+      col_16:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for September 2020.
+      col_17:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for October 2020 including date and quantity.
+      col_18:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for October 2020.
+      col_19:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for November 2020 including date and quantity.
+      col_20:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for November 2020.
+      col_21:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for December 2020 including date and quantity.
+      col_22:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for December 2020.
+      col_23:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for January 2021 including date and quantity.
+      col_24:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for January 2021.
+      col_25:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for February 2021 including date and quantity.
+      col_26:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for February 2021.
+      col_27:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for March 2021 including date and quantity.
+      col_28:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for March 2021.
+      col_29:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year 2021-2022 data including date and quantity.
+      col_30:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for FY 2021-2022.
+      col_31:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for May 2021 including date and quantity.
+      col_32:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for May 2021.
+      col_33:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for June 2021 including date and quantity.
+      col_34:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for June 2021.
+      col_35:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for July 2021 including date and quantity.
+      col_36:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for July 2021.
+      col_37:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for August 2021 including date and quantity.
+      col_38:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for August 2021.
+      col_39:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for September 2021 including date and quantity.
+      col_40:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for September 2021.
+      col_41:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for October 2021 including date and quantity.
+      col_42:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for October 2021.
+      col_43:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for November 2021 including date and quantity.
+      col_44:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for November 2021.
+      col_45:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for December 2021 including date and quantity.
+      col_46:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for December 2021.
+      col_47:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for January 2022 including date and quantity.
+      col_48:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for January 2022.
+      col_49:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for February 2022 including date and quantity.
+      col_50:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for February 2022.
+      col_51:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for March 2022 including date and quantity.
+      col_52:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for March 2022.
+      col_53:
+        type: TEXT
+        sensitivity: internal
+        description: Fiscal Year 2022-2023 data including date and quantity.
+      col_54:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for FY 2022-2023.
+      col_55:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for May 2022 including date and quantity.
+      col_56:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for May 2022.
+      col_57:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for June 2022 including date and quantity.
+      col_58:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for June 2022.
+      col_59:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for July 2022 including date and quantity.
+      col_60:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for July 2022.
+      col_61:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for August 2022 including date and quantity.
+      col_62:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for August 2022.
+      col_63:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for September 2022 including date and quantity.
+      col_64:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for September 2022.
+      col_65:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for October 2022 including date and quantity.
+      col_66:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for October 2022.
+      col_67:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for November 2022 including date and quantity.
+      col_68:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for November 2022.
+      col_69:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for December 2022 including date and quantity.
+      col_70:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for December 2022.
+      col_71:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for January 2023 including date and quantity.
+      col_72:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for January 2023.
+      col_73:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for February 2023 including date and quantity.
+      col_74:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for February 2023.
+      col_75:
+        type: TEXT
+        sensitivity: internal
+        description: Monthly data for March 2023 including date and quantity.
+      col_76:
+        type: TEXT
+        sensitivity: internal
+        description: Sum of amounts in LC for March 2023.

@@ -1,0 +1,28 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": [
+        "server.api:app",
+        "--port",
+        "8765"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "studio-preview",
+      "runtimeExecutable": ".venv/bin/streamlit",
+      "runtimeArgs": [
+        "run",
+        "app.py",
+        "--server.headless",
+        "true",
+        "--server.port",
+        "8510"
+      ],
+      "port": 8510
+    }
+  ]
+}

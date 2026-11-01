@@ -1,0 +1,55 @@
+tables:
+  procurement_details:
+    description: Details of procurement transactions, with each row representing a
+      unique procurement document and its associated details over time. doc_date covers
+      2019-04-01 to 2025-11-14.
+    requires_finding: null
+    columns:
+      pur_doc:
+        type: BIGINT
+        sensitivity: internal
+        description: Procurement document number, unique identifier for each transaction.
+      doc_date:
+        type: TEXT
+        sensitivity: internal
+        description: Date of the procurement transaction in YYYY-MM-DD format.
+      material:
+        type: TEXT
+        sensitivity: internal
+        description: Material code representing the item procured.
+      short_text:
+        type: TEXT
+        sensitivity: internal
+        description: Brief description of the procured item.
+      quantity:
+        type: FLOAT
+        sensitivity: internal
+        description: Quantity of the item procured, measured in respective units.
+      oun:
+        type: TEXT
+        sensitivity: internal
+        description: Unit of measure for the quantity (e.g., EA for each, FT for feet,
+          KG for kilograms).
+      net_price:
+        type: FLOAT
+        sensitivity: internal
+        description: Net price per unit of the item in the specified currency.
+      crcy:
+        type: TEXT
+        sensitivity: internal
+        description: Currency code for the transaction (e.g., INR for Indian Rupee,
+          EUR for Euro).
+      net_value:
+        type: FLOAT
+        sensitivity: internal
+        description: Total net value of the procurement transaction, calculated as
+          quantity multiplied by net price.
+      porg:
+        type: TEXT
+        sensitivity: internal
+        description: Procurement organization code indicating the type of procurement
+          (e.g., INDI for indigenous, IMPO for imports, SERV for services).
+      vendor_supplying_plant:
+        type: TEXT
+        sensitivity: internal
+        description: Name and identifier of the vendor supplying the material.

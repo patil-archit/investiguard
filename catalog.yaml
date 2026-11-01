@@ -1,0 +1,173 @@
+tables:
+  customers:
+    description: ''
+    requires_finding: null
+    columns:
+      customer_id:
+        type: INTEGER
+        sensitivity: internal
+      name:
+        type: TEXT
+        sensitivity: confidential
+      email:
+        type: TEXT
+        sensitivity: confidential
+      phone:
+        type: TEXT
+        sensitivity: confidential
+      region:
+        type: TEXT
+        sensitivity: internal
+      signup_date:
+        type: DATE
+        sensitivity: internal
+      loyalty_tier:
+        type: TEXT
+        sensitivity: internal
+  deployment_logs:
+    description: ''
+    requires_finding: any
+    columns:
+      deploy_id:
+        type: INTEGER
+        sensitivity: internal
+      deployed_at:
+        type: DATE
+        sensitivity: internal
+      service:
+        type: TEXT
+        sensitivity: internal
+      version:
+        type: TEXT
+        sensitivity: internal
+      change_type:
+        type: TEXT
+        sensitivity: internal
+      author_email:
+        type: TEXT
+        sensitivity: confidential
+  employee_records:
+    description: ''
+    requires_finding: any
+    columns:
+      emp_id:
+        type: INTEGER
+        sensitivity: internal
+      name:
+        type: TEXT
+        sensitivity: confidential
+      department:
+        type: TEXT
+        sensitivity: internal
+      salary:
+        type: REAL
+        sensitivity: restricted
+      pan:
+        type: TEXT
+        sensitivity: restricted
+      bank_account:
+        type: TEXT
+        sensitivity: restricted
+  orders:
+    description: ''
+    requires_finding: null
+    columns:
+      order_id:
+        type: INTEGER
+        sensitivity: internal
+      customer_id:
+        type: INTEGER
+        sensitivity: internal
+      order_date:
+        type: DATE
+        sensitivity: internal
+      region:
+        type: TEXT
+        sensitivity: internal
+      channel:
+        type: TEXT
+        sensitivity: internal
+      product_id:
+        type: INTEGER
+        sensitivity: internal
+      quantity:
+        type: INTEGER
+        sensitivity: internal
+      amount:
+        type: REAL
+        sensitivity: internal
+      status:
+        type: TEXT
+        sensitivity: internal
+      shipping_address:
+        type: TEXT
+        sensitivity: confidential
+  payments:
+    description: ''
+    requires_finding: null
+    columns:
+      payment_id:
+        type: INTEGER
+        sensitivity: internal
+      order_id:
+        type: INTEGER
+        sensitivity: internal
+      payment_date:
+        type: DATE
+        sensitivity: internal
+      method:
+        type: TEXT
+        sensitivity: internal
+      status:
+        type: TEXT
+        sensitivity: internal
+      failure_reason:
+        type: TEXT
+        sensitivity: internal
+      amount:
+        type: REAL
+        sensitivity: internal
+      card_last4:
+        type: TEXT
+        sensitivity: restricted
+      billing_address:
+        type: TEXT
+        sensitivity: confidential
+  products:
+    description: ''
+    requires_finding: null
+    columns:
+      product_id:
+        type: INTEGER
+        sensitivity: internal
+      product_name:
+        type: TEXT
+        sensitivity: internal
+      category:
+        type: TEXT
+        sensitivity: internal
+      price:
+        type: REAL
+        sensitivity: internal
+      stock_status:
+        type: TEXT
+        sensitivity: internal
+  support_tickets:
+    description: ''
+    requires_finding: any
+    columns:
+      ticket_id:
+        type: INTEGER
+        sensitivity: internal
+      created_at:
+        type: DATE
+        sensitivity: internal
+      category:
+        type: TEXT
+        sensitivity: internal
+      customer_email:
+        type: TEXT
+        sensitivity: confidential
+      message_body:
+        type: TEXT
+        sensitivity: confidential
