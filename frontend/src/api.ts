@@ -1,4 +1,6 @@
+/** C = InvestiGuard (hypothesis-driven, scoped). A = Direct AI baseline (no hypotheses, every column open). */
 export type Mode = 'C' | 'A'
+export const MODE_LABEL: Record<Mode, string> = { C: 'InvestiGuard', A: 'Direct AI' }
 export type Status = 'PROPOSED' | 'TESTING' | 'SUPPORTED' | 'REJECTED' | 'INCONCLUSIVE' | 'BLOCKED'
 
 export interface Dataset {
@@ -59,6 +61,7 @@ export interface Report {
   unsupported_claims_dropped: number
   done_reason: string | null
   not_investigation?: boolean
+  unverified?: boolean
   exposure: Exposure
 }
 
@@ -103,6 +106,18 @@ export interface InvestigationResult {
   hypotheses: Record<string, Hypothesis>
   evidence: EvidenceNode[]
   gateway_log: GatewayRecord[]
+  steps?: DirectStep[]
+}
+
+/** One free-form query in a Direct AI run (no hypothesis, no verdict). */
+export interface DirectStep {
+  id: string
+  thought: string
+  sql: string
+  error: string | null
+  rows: number
+  columns: string[]
+  preview?: Record<string, any>[]
 }
 
 export interface Investigation {
@@ -147,7 +162,7 @@ export interface Architecture {
   stop: { share: number; iterations: number }
 }
 
-export interface CompareRow { mode: Mode; root_cause: string; exposure: Exposure; seconds: number; problem: string }
+export interface CompareRow { mode: Mode; root_cause: string; exposure: Exposure; verified: boolean; seconds: number; problem: string }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)

@@ -61,8 +61,11 @@ From the command line:
 - **Evidence engine** (`investiguard/agent/evidence.py`): explained share, lift, a specificity check and
   relabelling detection. It decides the verdicts, and the key numbers in the plain-language summary
   come from it.
+- **Direct AI baseline** (`investiguard/agent/direct.py`): the comparison mode. One AI analyst sees every
+  column, runs free-form queries and states the reason itself, with no hypotheses, no policy and no evidence
+  engine. The "InvestiGuard vs AI" page puts the two runs side by side.
 - **Ask your data** (`investiguard/ask.py`): NL → SQL, under the same trust boundary.
-- **Agent Studio** (`app.py`, `investiguard/ui/`): the Investigate, Ask, A vs C, Data and How it works
+- **Agent Studio** (`app.py`, `investiguard/ui/`): the Investigate, Ask, InvestiGuard vs Direct AI, Data and How it works
   tabs, with a custom theme (`.streamlit/config.toml`) and stylesheet (`investiguard/ui/styles.py`).
 - **Tests:** 41 cases covering threats T2, T3, T5 and T6, the agent loop, the evidence engine, ingest
   of every format, and profiling.

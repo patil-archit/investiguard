@@ -4,6 +4,7 @@ The scripted LLM mimics an agent that first asks for deployment logs (should be 
 evidence gate), confirms payment failures, then gets deployment logs on the retry.
 """
 from investiguard import catalog
+from investiguard.agent.direct import DirectStep, run_direct
 from investiguard.agent.graph import Runtime, run
 from investiguard.agent.schemas import (Claim, Hypotheses, Interpretation, Objective, ProposedHypothesis,
                                         QueryPlan, Report)
@@ -63,6 +64,13 @@ class ScriptedLLM:
             # the verdict is ignored for decomposition hypotheses; the evidence engine decides
             return Interpretation(verdict="SUPPORTED" if d == "release" else "REJECTED",
                                   finding=f"scripted {d}", follow_ups=[])
+        if schema is DirectStep:  # Direct AI baseline: two free-form queries, then concludes
+            n = self.calls.count("DirectStep")
+            if n <= 2:
+                return DirectStep(thought="check payments" if n == 1 else "check customers",
+                                  sql=SQL["payment"] if n == 1 else
+                                  "SELECT email, COUNT(*) AS n FROM customers GROUP BY email LIMIT 5", done=False)
+            return DirectStep(thought="enough", sql="", done=True)
         if schema is Report:
             return Report(root_cause="payment-service release", summary="s", limitations="l", plain_summary="p",
                           claims=[Claim(text="payments failed", evidence_ids=["E1"]),
@@ -92,11 +100,17 @@ def test_full_loop_policy_and_gate():
     assert all(not c.active() for c in rt.store.caps.values())
 
 
-def test_unrestricted_baseline_grants_everything():
+def test_direct_ai_baseline_has_no_hypotheses_or_checks():
     rt = Runtime(catalog=catalog.load(), llm=ScriptedLLM(), mode="A")
     events = []
-    run("Revenue fell 21% in September 2026.", rt, events.append)
-    assert not [e for e in events if e["kind"] == "policy_denied"]
+    final = run_direct("Revenue fell 21% in September 2026.", rt, events.append)
+    kinds = [e["kind"] for e in events]
+    assert final["hypotheses"] == {} and final["evidence"] == [] and len(final["steps"]) == 2
+    assert "policy_denied" not in kinds and kinds.count("cap_granted") == 1
+    rep = final["report"]
+    assert rep["unverified"] and rep["unsupported_claims_dropped"] == 0 and rep["key_facts"] == []
+    assert "customers.email" in rep["exposure"]["sensitive_exposed_raw"]   # read raw, nobody stopped it
+    assert all(not c.active() for c in rt.store.caps.values())
 
 
 def test_evidence_engine_rejects_restating_segment():

@@ -9,6 +9,7 @@ from sqlalchemy.engine import make_url
 from investiguard import ask as ask_mod
 from investiguard import catalog as catalog_mod
 from investiguard import config
+from investiguard.agent.direct import run_direct
 from investiguard.agent.graph import Runtime, run
 from investiguard.llm import ChatLLM
 from investiguard.ui import architecture, data_tab, styles
@@ -20,7 +21,7 @@ st.session_state.setdefault("asks", [])
 
 STATUS_ICON = {"PROPOSED": "⚪", "TESTING": "🔵", "SUPPORTED": "🟢", "REJECTED": "🔴",
                "INCONCLUSIVE": "🟡", "BLOCKED": "⛔"}
-MODES = {"C": "InvestiGuard · scoped access", "A": "Unrestricted baseline"}
+MODES = {"C": "InvestiGuard · hypothesis-driven", "A": "Direct AI · no checks"}
 
 DATASETS = config.datasets()
 
@@ -36,10 +37,10 @@ with st.sidebar:
         styles.side_label("Dataset")
         ds_name = st.selectbox("Dataset", list(DATASETS), key="dataset_select", label_visibility="collapsed",
                                format_func=lambda n: DATASETS[n]["label"])
-    styles.side_label("Access mode")
+    styles.side_label("Mode")
     mode = st.radio("Access mode", list(MODES), format_func=MODES.get, label_visibility="collapsed",
-                    help="C grants each hypothesis only the columns it needs. A is the unrestricted baseline "
-                         "used for comparison.")
+                    help="InvestiGuard tests hypotheses, each with only the columns it needs. Direct AI is the baseline: "
+                         "the AI looks for the reason itself with every column open and no checks.")
     styles.side_label("Model")
     model = st.text_input("Model", config.LLM_MODEL, label_visibility="collapsed")
     if ds_name:
@@ -73,7 +74,7 @@ sensitive = sum(cat.sensitivity(c) in ("confidential", "restricted") for c in ca
 styles.hero(ds["label"], "Ask questions or investigate why a number changed. Every query is checked against a "
                          "least-privilege policy before it reaches the data.",
             [("tables", len(cat.tables)), ("columns", len(cat.all_columns())), ("sensitive", sensitive),
-             ("mode", "scoped" if mode == "C" else "unrestricted"), ("model", model.split(":")[-1])])
+             ("mode", "InvestiGuard" if mode == "C" else "Direct AI"), ("model", model.split(":")[-1])])
 
 tab_run, tab_ask, tab_cmp, tab_data, tab_how = st.tabs(
     ["🔎  Investigate", "💬  Ask your data", "⚖️  A vs C", "🗂️  Data", "🧭  How it works"])
@@ -218,7 +219,7 @@ with tab_run:
 
         with st.spinner("Investigating…"):
             try:
-                final = run(problem, rt, on_event)
+                final = (run_direct if mode == "A" else run)(problem, rt, on_event)
             except Exception as e:
                 st.exception(e)
                 st.stop()
@@ -280,7 +281,7 @@ with tab_cmp:
                      "sensitive raw": ", ".join(e["sensitive_exposed_raw"]) or "0",
                      "queries denied": e["queries_denied"], "seconds": round(r["seconds"], 1)})
     if not rows:
-        st.info("Run the same problem in both access modes (sidebar) to compare them here.")
+        st.info("Run the same problem in both modes (sidebar) to compare them here.")
     else:
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, column_config={
             "data exposure": st.column_config.ProgressColumn(min_value=0, max_value=1, format="%.0f%%"),

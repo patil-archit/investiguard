@@ -20,6 +20,7 @@ from sqlalchemy.engine import make_url
 from investiguard import ask as ask_mod
 from investiguard import catalog as catalog_mod
 from investiguard import config, db, explain, profile
+from investiguard.agent.direct import run_direct
 from investiguard.agent.graph import Runtime, build_graph, run
 from investiguard.ingest import SUPPORTED, ingest_uploads, slug
 from investiguard.llm import ChatLLM
@@ -219,9 +220,11 @@ def start_investigation(body: InvestigateIn):
         try:
             rt = Runtime(catalog=cat, llm=_llm(body.model), mode=body.mode, url=ds["url"],
                          currency=ds.get("currency", "INR"))
-            final = run(body.problem, rt, lambda ev: rec["events"].append(_plain(ev)))
+            # Mode C: hypothesis-driven InvestiGuard. Mode A: the Direct AI baseline it is compared against.
+            runner = run_direct if body.mode == "A" else run
+            final = runner(body.problem, rt, lambda ev: rec["events"].append(_plain(ev)))
             rec["result"] = _plain({"report": final["report"], "hypotheses": final.get("hypotheses", {}),
-                                    "evidence": final.get("evidence", []),
+                                    "evidence": final.get("evidence", []), "steps": final.get("steps", []),
                                     "gateway_log": [vars(q) for q in rt.gateway.log]})
             rec["status"] = "done"
             LATEST[(body.dataset, body.mode)] = rid
@@ -271,6 +274,7 @@ def compare(dataset: str):
         if rid and RUNS[rid]["result"] and not RUNS[rid]["result"]["report"].get("not_investigation"):
             rep = RUNS[rid]["result"]["report"]
             out.append({"mode": mode, "root_cause": rep["root_cause"], "exposure": rep["exposure"],
+                        "verified": not rep.get("unverified", False),
                         "seconds": RUNS[rid]["seconds"], "problem": RUNS[rid]["problem"]})
     return out
 

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ChevronRight, FileSearch, Fingerprint, Info, ScrollText, ShieldCheck } from 'lucide-react'
+import { Bot, ChevronRight, FileSearch, Fingerprint, Info, ScrollText, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EvidenceNode, Investigation } from '../api'
@@ -19,12 +19,13 @@ export default function ReportView({ inv }: { inv: Investigation }) {
     )
   }
   const e = rep.exposure
+  const direct = !!rep.unverified
   return (
     <div className="space-y-8 animate-fade-in">
       {/* plain words */}
       <section className="card overflow-hidden">
-        <div className="border-l-[3px] border-accent px-7 py-6">
-          <div className="eyebrow text-accent">Conclusion in plain words</div>
+        <div className={clsx('border-l-[3px] px-7 py-6', direct ? 'border-warn' : 'border-accent')}>
+          <div className={clsx('eyebrow', direct ? 'text-warn' : 'text-accent')}>{direct ? "The AI's own conclusion" : 'Conclusion in plain words'}</div>
           <p className="mt-3 max-w-4xl text-[19px] font-medium leading-relaxed tracking-[-0.01em] text-fg">{rep.plain_summary}</p>
           {rep.key_facts.length > 0 && (
             <ul className="mt-5 grid gap-x-8 gap-y-2 md:grid-cols-2">
@@ -35,7 +36,10 @@ export default function ReportView({ inv }: { inv: Investigation }) {
               ))}
             </ul>
           )}
-          <p className="mt-5 text-[11.5px] text-subtle">Key numbers are calculated directly from the data by code, not written by the AI.</p>
+          {direct
+            ? <p className="mt-5 flex items-start gap-1.5 text-[11.5px] text-warn"><TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+                Written by the AI from its own reading of the results. No number, claim or verdict here was checked by code.</p>
+            : <p className="mt-5 text-[11.5px] text-subtle">Key numbers are calculated directly from the data by code, not written by the AI.</p>}
         </div>
       </section>
 
@@ -46,7 +50,7 @@ export default function ReportView({ inv }: { inv: Investigation }) {
         <Stat label="Sensitive raw" value={e.sensitive_exposed_raw.length} tone={e.sensitive_exposed_raw.length ? 'bad' : 'good'} hint="unmasked sensitive cols" />
         <Stat label="Queries" value={`${e.queries_allowed} / ${e.queries_denied}`} hint="allowed / denied" />
         <Stat label="Capabilities" value={e.capabilities_issued} hint={`gateway p50 ${e.gateway_p50_ms ?? '–'} ms`} />
-        <Stat label="Time" value={`${inv.seconds ?? '–'}s`} hint={inv.mode === 'C' ? 'scoped run' : 'unrestricted run'} />
+        <Stat label="Time" value={`${inv.seconds ?? '–'}s`} hint={direct ? 'Direct AI run' : 'InvestiGuard run'} />
       </div>
 
       {/* technical report */}
@@ -70,14 +74,35 @@ export default function ReportView({ inv }: { inv: Investigation }) {
         </Card>
       </section>
 
+      {/* direct AI: the queries it chose, with nothing computed on top */}
+      {direct && res.steps && (
+        <section>
+          <SectionTitle icon={<Bot className="h-4 w-4" />} title="Queries the AI ran" sub="no hypotheses and no evidence engine: the AI judged these results itself" />
+          <Card className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-line"><tr><th className="th">Step</th><th className="th">Why</th><th className="th">Columns read</th><th className="th text-right">Rows</th></tr></thead>
+              <tbody className="divide-y divide-line">
+                {res.steps.map(s => (
+                  <tr key={s.id} className="hover:bg-canvas">
+                    <td className="td font-mono text-xs">{s.id}</td>
+                    <td className="td text-[13px]">{s.thought}{s.error && <div className="mt-0.5 text-xs text-bad">{s.error}</div>}</td>
+                    <td className="td"><span className="flex flex-wrap gap-1">{(s.columns ?? []).map(c => <Chip key={c} mono>{c.split('.').pop()}</Chip>)}</span></td>
+                    <td className="td text-right font-mono text-xs">{s.rows}</td>
+                  </tr>))}
+              </tbody>
+            </table>
+          </Card>
+        </section>
+      )}
+
       {/* evidence */}
-      <section>
+      {!direct && <section>
         <SectionTitle icon={<Fingerprint className="h-4 w-4" />} title="Evidence provenance"
           sub="hypothesis → capability → query → verdict computed by the evidence engine" />
         <div className="grid gap-3 lg:grid-cols-2">
           {res.evidence.map(ev => <EvidenceCard key={ev.id} ev={ev} statement={res.hypotheses[ev.hypothesis]?.statement} />)}
         </div>
-      </section>
+      </section>}
 
       {/* audit */}
       <section>

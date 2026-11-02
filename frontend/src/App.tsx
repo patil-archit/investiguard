@@ -14,7 +14,7 @@ type Page = 'investigate' | 'ask' | 'compare' | 'data' | 'how'
 const NAV: { id: Page; label: string; icon: ReactNode }[] = [
   { id: 'investigate', label: 'Investigate', icon: <ScanSearch className="h-4 w-4" /> },
   { id: 'ask', label: 'Ask your data', icon: <MessageSquareText className="h-4 w-4" /> },
-  { id: 'compare', label: 'Scoped vs open', icon: <GitCompareArrows className="h-4 w-4" /> },
+  { id: 'compare', label: 'InvestiGuard vs AI', icon: <GitCompareArrows className="h-4 w-4" /> },
   { id: 'data', label: 'Data & catalogue', icon: <Database className="h-4 w-4" /> },
   { id: 'how', label: 'How it works', icon: <BookOpen className="h-4 w-4" /> },
 ]
@@ -71,12 +71,12 @@ export default function App() {
 
         <div className="mt-auto space-y-5 border-t border-line px-5 py-5">
           <div>
-            <div className="label">Access mode</div>
+            <div className="label">Mode</div>
             <Segmented value={mode} onChange={setMode}
-              options={[{ id: 'C', label: 'Scoped' }, { id: 'A', label: 'Unrestricted' }]} />
+              options={[{ id: 'C', label: 'InvestiGuard' }, { id: 'A', label: 'Direct AI' }]} />
             <p className="mt-2 flex items-start gap-1.5 text-[11.5px] leading-snug text-muted">
               <span className={clsx('mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full', mode === 'C' ? 'bg-good' : 'bg-bad')} />
-              {mode === 'C' ? 'Each hypothesis gets only the columns it needs.' : 'Baseline: every column is open.'}
+              {mode === 'C' ? 'Tests hypotheses one by one, each with only the columns it needs.' : 'Baseline: the AI looks for the reason itself, with every column open and no checks.'}
             </p>
           </div>
           <div>

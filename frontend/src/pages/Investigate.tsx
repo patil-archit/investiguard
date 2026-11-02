@@ -1,10 +1,10 @@
 import clsx from 'clsx'
 import {
-  ArrowRight, Ban, CheckCircle2, ChevronRight, Compass, Flag, KeyRound, ListChecks, Lock, ScanSearch, ShieldAlert,
+  ArrowRight, Ban, Bot, CheckCircle2, ChevronRight, Compass, Flag, KeyRound, ListChecks, Lock, ScanSearch, ShieldAlert,
   TriangleAlert,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Hypothesis, IgEvent } from '../api'
+import type { DirectStep, Hypothesis, IgEvent } from '../api'
 import { Button, Card, Chip, Empty, ErrorNote, PageHeader, SectionTitle, StatusBadge } from '../components/ui'
 import { useStore } from '../store'
 import ReportView from './ReportView'
@@ -22,6 +22,20 @@ function deriveHypotheses(events: IgEvent[]) {
   return { hyps: Object.values(hyps), current }
 }
 
+/** Direct AI runs have no hypotheses: rebuild its query steps from the event stream. */
+function deriveSteps(events: IgEvent[]): DirectStep[] {
+  const steps: DirectStep[] = []
+  for (const ev of events) {
+    if (ev.kind === 'direct_step' && ev.sql) steps.push({ id: ev.step, thought: ev.thought, sql: ev.sql, error: null, rows: 0, columns: [] })
+    const s = steps.find(x => x.id === ev.hypothesis)
+    if (!s) continue
+    if (ev.kind === 'query_ok') Object.assign(s, { rows: ev.rows, columns: ev.columns })
+    if (ev.kind === 'sql_error') s.error = ev.error
+    if (ev.kind === 'gateway_denied') s.error = ev.reason
+  }
+  return steps
+}
+
 export default function Investigate() {
   const { dataset, mode, runs, startRun } = useStore()
   const key = `${dataset?.name}:${mode}`
@@ -33,6 +47,8 @@ export default function Investigate() {
   useEffect(() => { setProblem(run?.problem ?? suggestions[0] ?? '') }, [dataset?.name]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { hyps, current } = useMemo(() => deriveHypotheses(run?.events ?? []), [run?.events])
+  const steps = useMemo(() => deriveSteps(run?.events ?? []), [run?.events])
+  const direct = mode === 'A'
   const counts = useMemo(() => {
     const ev = run?.events ?? []
     const c = (k: string) => ev.filter(e => e.kind === k).length
@@ -49,11 +65,13 @@ export default function Investigate() {
   return (
     <div className="space-y-8">
       <PageHeader title="Investigate a change"
-        sub="The agent proposes hypotheses, tests the least sensitive ones first, and is granted only the columns each test needs. Every grant is revoked once its test has a verdict."
+        sub={direct
+          ? 'Direct AI baseline: the AI sees every column, runs whatever queries it likes and states the reason itself. Nothing it concludes is checked by code.'
+          : 'The agent proposes hypotheses, tests the least sensitive ones first, and is granted only the columns each test needs. Every grant is revoked once its test has a verdict.'}
         right={<span className={clsx('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium',
-          mode === 'C' ? 'border-good/25 bg-good-soft text-good' : 'border-bad/25 bg-bad-soft text-bad')}>
-          {mode === 'C' ? <ShieldAlert className="h-3.5 w-3.5" /> : <TriangleAlert className="h-3.5 w-3.5" />}
-          {mode === 'C' ? 'Scoped access' : 'Unrestricted baseline'}
+          direct ? 'border-warn/25 bg-warn-soft text-warn' : 'border-good/25 bg-good-soft text-good')}>
+          {direct ? <Bot className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+          {direct ? 'Direct AI · no checks' : 'InvestiGuard · hypothesis-driven'}
         </span>} />
 
       <Card>
@@ -89,11 +107,19 @@ export default function Investigate() {
 
         {run && (
           <div className="grid grid-cols-2 border-t border-line sm:grid-cols-5">
-            <Counter label="Hypotheses" value={hyps.length} />
-            <Counter label="Grants" value={counts.grants} />
-            <Counter label="Denials" value={counts.denials} tone={counts.denials ? 'bad' : undefined} />
-            <Counter label="Queries" value={counts.queries} />
-            <Counter label="Supported" value={counts.supported} tone={counts.supported ? 'good' : undefined} />
+            {direct ? <>
+              <Counter label="Queries run" value={counts.queries} />
+              <Counter label="Errors" value={steps.filter(s => s.error).length} tone={steps.some(s => s.error) ? 'bad' : undefined} />
+              <Counter label="Columns open" value={dataset?.columns ?? 0} />
+              <Counter label="Policy checks" value={0} />
+              <Counter label="Verdicts by code" value={0} />
+            </> : <>
+              <Counter label="Hypotheses" value={hyps.length} />
+              <Counter label="Grants" value={counts.grants} />
+              <Counter label="Denials" value={counts.denials} tone={counts.denials ? 'bad' : undefined} />
+              <Counter label="Queries" value={counts.queries} />
+              <Counter label="Supported" value={counts.supported} tone={counts.supported ? 'good' : undefined} />
+            </>}
           </div>
         )}
       </Card>
@@ -104,16 +130,27 @@ export default function Investigate() {
       ) : (
         <>
           <div className="grid gap-6 xl:grid-cols-5">
-            <div className="xl:col-span-3">
-              <SectionTitle icon={<ListChecks className="h-4 w-4" />} title="Hypotheses"
-                sub="ranked by plausibility × information gain ÷ privilege cost" />
-              <div className="space-y-2">
-                {hyps.length === 0 && <Skeleton />}
-                {[...hyps].sort((a, b) => b.priority - a.priority).map(h => (
-                  <HypothesisCard key={h.id} h={h} active={h.id === current} />
-                ))}
+            {direct ? (
+              <div className="xl:col-span-3">
+                <SectionTitle icon={<Bot className="h-4 w-4" />} title="What the AI looked at"
+                  sub="free-form queries chosen by the AI; no hypotheses, no per-query permission" />
+                <div className="space-y-2">
+                  {steps.length === 0 && <Skeleton />}
+                  {steps.map(s => <StepCard key={s.id} s={s} />)}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="xl:col-span-3">
+                <SectionTitle icon={<ListChecks className="h-4 w-4" />} title="Hypotheses"
+                  sub="ranked by plausibility × information gain ÷ privilege cost" />
+                <div className="space-y-2">
+                  {hyps.length === 0 && <Skeleton />}
+                  {[...hyps].sort((a, b) => b.priority - a.priority).map(h => (
+                    <HypothesisCard key={h.id} h={h} active={h.id === current} />
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex flex-col xl:col-span-2">
               <SectionTitle icon={<Compass className="h-4 w-4" />} title="Timeline" sub="every decision the control plane made"
                 right={running ? <span className="flex items-center gap-1.5 text-xs font-medium text-accent"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />Live</span> : null} />
@@ -139,6 +176,30 @@ function Counter({ label, value, tone }: { label: string; value: number; tone?: 
 
 function Skeleton() {
   return <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-20 animate-pulse rounded-lg bg-sunken" />)}</div>
+}
+
+function StepCard({ s }: { s: DirectStep }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="card p-4 animate-fade-in">
+      <div className="flex items-start gap-4">
+        <span className="mt-0.5 font-mono text-[11px] text-subtle">{s.id}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13.5px] leading-snug text-fg">{s.thought}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
+            {s.error ? <span className="text-bad">{s.error}</span> : <>
+              <span>{s.rows} rows ·</span>
+              {s.columns.map(c => <Chip key={c} mono>{c.split('.').pop()}</Chip>)}
+            </>}
+          </div>
+          <button onClick={() => setOpen(o => !o)} className="mt-2 flex items-center gap-1 text-[11.5px] text-subtle hover:text-fg">
+            <ChevronRight className={clsx('h-3 w-3 transition', open && 'rotate-90')} /> SQL
+          </button>
+          {open && <pre className="mt-2 overflow-x-auto rounded-md border border-line bg-sunken p-3 font-mono text-[11.5px] text-fg-2">{s.sql}</pre>}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function HypothesisCard({ h, active }: { h: Hypothesis; active: boolean }) {
@@ -177,6 +238,7 @@ function HypothesisCard({ h, active }: { h: Hypothesis; active: boolean }) {
 
 const EVENT_STYLE: Record<string, { icon: ReactNode; tone: string }> = {
   plan: { icon: <Compass className="h-3.5 w-3.5" />, tone: 'text-fg-2' },
+  direct_step: { icon: <Bot className="h-3.5 w-3.5" />, tone: 'text-warn' },
   cap_granted: { icon: <KeyRound className="h-3.5 w-3.5" />, tone: 'text-accent' },
   policy_denied: { icon: <Ban className="h-3.5 w-3.5" />, tone: 'text-bad' },
   query_ok: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, tone: 'text-good' },
@@ -191,7 +253,11 @@ function describe(ev: IgEvent): { title: ReactNode; detail?: ReactNode } | null 
   const col = (r: string) => r.split('.').pop()
   switch (ev.kind) {
     case 'plan': return { title: <>Planner picks <b className="font-medium">{ev.hypothesis}</b></>, detail: `priority ${ev.priority}` }
-    case 'cap_granted': return {
+    case 'direct_step': return ev.done
+      ? { title: <>AI decides it has the answer</>, detail: ev.thought }
+      : { title: <>AI runs <b className="font-medium">{ev.step}</b></>, detail: ev.thought }
+    case 'cap_granted': if (ev.resources?.['*']) return { title: <>Whole database opened to the AI</>, detail: `all columns, raw, TTL ${ev.ttl_s}s` }
+      return {
       title: <>Capability granted to <b className="font-medium">{ev.hypothesis}</b></>,
       detail: <span className="mt-1 flex flex-wrap items-center gap-1">{Object.entries(ev.resources as Record<string, string>).map(([r, m]) =>
         <Chip key={r} mono tone={m === 'aggregate_only' ? 'warn' : 'default'}>{col(r)}{m === 'aggregate_only' ? ' · count-only' : ''}</Chip>)}
