@@ -1,11 +1,11 @@
 import clsx from 'clsx'
 import {
-  Ban, BrainCircuit, CheckCircle2, ChevronRight, Compass, Flag, KeyRound, Lightbulb, Lock, Play, ScanSearch,
-  ShieldAlert, Sparkles, TriangleAlert, Wand2,
+  ArrowRight, Ban, CheckCircle2, ChevronRight, Compass, Flag, KeyRound, ListChecks, Lock, ScanSearch, ShieldAlert,
+  TriangleAlert,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Hypothesis, IgEvent } from '../api'
-import { Button, Card, Chip, Empty, ErrorNote, SectionTitle, StatusBadge } from '../components/ui'
+import { Button, Card, Chip, Empty, ErrorNote, PageHeader, SectionTitle, StatusBadge } from '../components/ui'
 import { useStore } from '../store'
 import ReportView from './ReportView'
 
@@ -47,36 +47,26 @@ export default function Investigate() {
   const running = run?.status === 'running'
 
   return (
-    <div className="space-y-6">
-      {/* problem */}
-      <Card className="overflow-hidden">
-        <div className="relative p-6">
-          <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-white">
-                Find out <span className="gradient-text">why a number changed</span>
-              </h1>
-              <p className="mt-1 max-w-2xl text-sm text-slate-400">
-                The agent proposes hypotheses, tests the least sensitive ones first, and is granted only the columns each
-                test needs. Each grant is revoked once that test has a verdict.
-              </p>
-            </div>
-            <span className={clsx('inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ring-1',
-              mode === 'C' ? 'bg-emerald-500/10 text-emerald-200 ring-emerald-500/30' : 'bg-rose-500/10 text-rose-200 ring-rose-500/30')}>
-              {mode === 'C' ? <ShieldAlert className="h-3.5 w-3.5" /> : <TriangleAlert className="h-3.5 w-3.5" />}
-              {mode === 'C' ? 'Scoped access' : 'Unrestricted baseline'}
-            </span>
-          </div>
+    <div className="space-y-8">
+      <PageHeader title="Investigate a change"
+        sub="The agent proposes hypotheses, tests the least sensitive ones first, and is granted only the columns each test needs. Every grant is revoked once its test has a verdict."
+        right={<span className={clsx('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium',
+          mode === 'C' ? 'border-good/25 bg-good-soft text-good' : 'border-bad/25 bg-bad-soft text-bad')}>
+          {mode === 'C' ? <ShieldAlert className="h-3.5 w-3.5" /> : <TriangleAlert className="h-3.5 w-3.5" />}
+          {mode === 'C' ? 'Scoped access' : 'Unrestricted baseline'}
+        </span>} />
 
+      <Card>
+        <div className="p-5">
           {suggestions.length > 1 && (
-            <div className="mt-5">
-              <div className="label flex items-center gap-1.5"><Lightbulb className="h-3.5 w-3.5" /> Suggested from your data</div>
+            <div className="mb-5">
+              <div className="label">Suggested from your data</div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {suggestions.slice(0, 6).map(s => (
                   <button key={s} onClick={() => setProblem(s)}
-                    className={clsx('card-hover rounded-xl border px-3.5 py-3 text-left text-[13px] leading-snug transition',
-                      problem === s ? 'border-indigo-400/50 bg-indigo-500/10 text-slate-100' : 'border-white/[0.07] bg-white/[0.02] text-slate-400')}>
+                    className={clsx('rounded-md border px-3.5 py-3 text-left text-[13px] leading-snug transition',
+                      problem === s ? 'border-accent bg-accent-soft/60 text-fg shadow-[0_0_0_1px_var(--color-accent)]'
+                        : 'border-line bg-surface text-muted hover:border-line-strong hover:text-fg')}>
                     <span className="line-clamp-3">{s}</span>
                   </button>
                 ))}
@@ -84,53 +74,51 @@ export default function Investigate() {
             </div>
           )}
 
-          <div className="mt-5">
-            <div className="label">Business problem</div>
-            <textarea className="input min-h-[84px] resize-y text-[15px] leading-relaxed" value={problem}
-              onChange={e => setProblem(e.target.value)}
-              placeholder="e.g. Revenue fell 18% in September compared with August. Find the root cause." />
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Button onClick={go} loading={starting || running} disabled={!problem.trim() || !dataset}>
-                {!running && <Play className="h-4 w-4" />} {running ? 'Investigating…' : 'Run investigation'}
-              </Button>
-              <span className="text-xs text-slate-500">Lookup questions ("which…", "top 10…") belong in <b className="text-slate-400">Ask your data</b>.</span>
-            </div>
-            {startError && <div className="mt-3"><ErrorNote error={startError} /></div>}
+          <div className="label">Business problem</div>
+          <textarea className="input min-h-[88px] resize-y text-[14.5px] leading-relaxed" value={problem}
+            onChange={e => setProblem(e.target.value)}
+            placeholder="e.g. Revenue fell 18% in September compared with August. Find the root cause." />
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <Button onClick={go} loading={starting || running} disabled={!problem.trim() || !dataset}>
+              {running ? 'Investigating…' : <>Run investigation <ArrowRight className="h-4 w-4" /></>}
+            </Button>
+            <span className="text-xs text-muted">Lookup questions (“which…”, “top 10…”) belong in <b className="font-medium text-fg-2">Ask your data</b>.</span>
           </div>
+          {startError && <div className="mt-3"><ErrorNote error={startError} /></div>}
         </div>
 
         {run && (
-          <div className="grid grid-cols-2 border-t border-white/[0.06] bg-white/[0.015] sm:grid-cols-5">
-            <Counter icon={<BrainCircuit className="h-4 w-4" />} label="Hypotheses" value={hyps.length} />
-            <Counter icon={<KeyRound className="h-4 w-4" />} label="Grants" value={counts.grants} />
-            <Counter icon={<Ban className="h-4 w-4" />} label="Denials" value={counts.denials} tone={counts.denials ? 'bad' : undefined} />
-            <Counter icon={<ScanSearch className="h-4 w-4" />} label="Queries" value={counts.queries} />
-            <Counter icon={<CheckCircle2 className="h-4 w-4" />} label="Supported" value={counts.supported} tone={counts.supported ? 'good' : undefined} />
+          <div className="grid grid-cols-2 border-t border-line sm:grid-cols-5">
+            <Counter label="Hypotheses" value={hyps.length} />
+            <Counter label="Grants" value={counts.grants} />
+            <Counter label="Denials" value={counts.denials} tone={counts.denials ? 'bad' : undefined} />
+            <Counter label="Queries" value={counts.queries} />
+            <Counter label="Supported" value={counts.supported} tone={counts.supported ? 'good' : undefined} />
           </div>
         )}
       </Card>
 
       {!run ? (
-        <Empty icon={<Sparkles className="h-5 w-5" />} title="No investigation yet"
+        <Empty icon={<ScanSearch className="h-6 w-6" />} title="No investigation yet"
           text="Pick a suggested problem or describe your own, then run. Hypotheses, grants, denials and revocations stream in live." />
       ) : (
         <>
           <div className="grid gap-6 xl:grid-cols-5">
-            <Card className="p-5 xl:col-span-3">
-              <SectionTitle icon={<BrainCircuit className="h-4 w-4" />} title="Hypotheses"
+            <div className="xl:col-span-3">
+              <SectionTitle icon={<ListChecks className="h-4 w-4" />} title="Hypotheses"
                 sub="ranked by plausibility × information gain ÷ privilege cost" />
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {hyps.length === 0 && <Skeleton />}
                 {[...hyps].sort((a, b) => b.priority - a.priority).map(h => (
                   <HypothesisCard key={h.id} h={h} active={h.id === current} />
                 ))}
               </div>
-            </Card>
-            <Card className="flex flex-col p-5 xl:col-span-2">
-              <SectionTitle icon={<Compass className="h-4 w-4" />} title="Live timeline" sub="every decision the control plane made"
-                right={running ? <span className="flex items-center gap-1.5 text-xs text-sky-300"><span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />live</span> : null} />
-              <Timeline events={run.events} />
-            </Card>
+            </div>
+            <div className="flex flex-col xl:col-span-2">
+              <SectionTitle icon={<Compass className="h-4 w-4" />} title="Timeline" sub="every decision the control plane made"
+                right={running ? <span className="flex items-center gap-1.5 text-xs font-medium text-accent"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />Live</span> : null} />
+              <Card className="flex-1 p-4"><Timeline events={run.events} /></Card>
+            </div>
           </div>
           {run.status === 'error' && <ErrorNote error={run.error ?? 'Investigation failed'} />}
           {run.investigation?.result && <ReportView inv={run.investigation} />}
@@ -140,86 +128,82 @@ export default function Investigate() {
   )
 }
 
-function Counter({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone?: 'good' | 'bad' }) {
+function Counter({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'bad' }) {
   return (
-    <div className="flex items-center gap-3 border-white/[0.06] px-5 py-3.5 [&:not(:last-child)]:border-r">
-      <span className="text-slate-500">{icon}</span>
-      <div>
-        <div className={clsx('text-lg font-bold leading-none', tone === 'good' ? 'text-emerald-300' : tone === 'bad' ? 'text-rose-300' : 'text-white')}>{value}</div>
-        <div className="mt-1 text-[11px] uppercase tracking-wider text-slate-500">{label}</div>
-      </div>
+    <div className="border-line px-5 py-3.5 [&:not(:last-child)]:border-r">
+      <div className="eyebrow">{label}</div>
+      <div className={clsx('mt-1 text-xl font-semibold tabular-nums', tone === 'good' ? 'text-good' : tone === 'bad' ? 'text-bad' : 'text-fg')}>{value}</div>
     </div>
   )
 }
 
 function Skeleton() {
-  return <div className="space-y-2.5">{[0, 1, 2].map(i => <div key={i} className="h-20 animate-pulse rounded-xl bg-white/[0.03]" />)}</div>
+  return <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-20 animate-pulse rounded-lg bg-sunken" />)}</div>
 }
 
 function HypothesisCard({ h, active }: { h: Hypothesis; active: boolean }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className={clsx('rounded-xl border p-3.5 transition animate-fade-in',
-      active ? 'border-sky-400/40 bg-sky-500/[0.06] shadow-[0_0_0_4px_rgb(56_189_248/0.06)]' : 'border-white/[0.06] bg-white/[0.02]')}>
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 font-mono text-[11px] font-semibold text-slate-500">{h.id}</span>
+    <div className={clsx('card p-4 transition animate-fade-in', active && 'border-accent shadow-[0_0_0_1px_var(--color-accent)]')}>
+      <div className="flex items-start gap-4">
+        <span className="mt-0.5 font-mono text-[11px] text-subtle">{h.id}</span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <StatusBadge status={h.status} />
-            {h.parent && <Chip tone="accent">drill-down of {h.parent}</Chip>}
+            {h.parent && <Chip>drill-down of {h.parent}</Chip>}
             {h.kind === 'event' && <Chip>event lookup</Chip>}
             {h.status === 'SUPPORTED' && h.explained_share > 0 &&
               <Chip tone="accent">explains {(h.explained_share * 100).toFixed(0)}%</Chip>}
           </div>
-          <p className="mt-1.5 text-[13.5px] leading-snug text-slate-200">{h.statement}</p>
-          {h.finding && <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-400">{h.finding}</p>}
-          <button onClick={() => setOpen(o => !o)} className="mt-2 flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-300">
+          <p className="mt-2 text-[13.5px] leading-snug text-fg">{h.statement}</p>
+          {h.finding && <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">{h.finding}</p>}
+          <button onClick={() => setOpen(o => !o)} className="mt-2 flex items-center gap-1 text-[11.5px] text-subtle hover:text-fg">
             <ChevronRight className={clsx('h-3 w-3 transition', open && 'rotate-90')} /> {h.resources.length} declared columns
           </button>
           {open && <div className="mt-2 flex flex-wrap gap-1">{h.resources.map(r => <Chip key={r} mono>{r}</Chip>)}</div>}
         </div>
         <div className="w-24 shrink-0 text-right">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">priority</div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/5">
-            <div className="h-full rounded-full bg-gradient-to-r from-indigo-400 to-cyan-400" style={{ width: `${Math.min(100, h.priority * 250)}%` }} />
+          <div className="eyebrow">Priority</div>
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-sunken">
+            <div className="h-full rounded-full bg-fg" style={{ width: `${Math.min(100, h.priority * 250)}%` }} />
           </div>
-          <div className="mt-1 font-mono text-[11px] text-slate-400">{h.priority.toFixed(3)}</div>
-          <div className="mt-1 text-[10px] text-slate-500">cost {h.privilege_cost}</div>
+          <div className="mt-1 font-mono text-[11px] text-fg-2">{h.priority.toFixed(3)}</div>
+          <div className="text-[10.5px] text-subtle">cost {h.privilege_cost}</div>
         </div>
       </div>
     </div>
   )
 }
 
-const EVENT_STYLE: Record<string, { icon: ReactNode; ring: string }> = {
-  plan: { icon: <Compass className="h-3.5 w-3.5" />, ring: 'text-indigo-300 bg-indigo-500/15' },
-  cap_granted: { icon: <KeyRound className="h-3.5 w-3.5" />, ring: 'text-sky-300 bg-sky-500/15' },
-  policy_denied: { icon: <Ban className="h-3.5 w-3.5" />, ring: 'text-rose-300 bg-rose-500/15' },
-  query_ok: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, ring: 'text-emerald-300 bg-emerald-500/15' },
-  gateway_denied: { icon: <ShieldAlert className="h-3.5 w-3.5" />, ring: 'text-rose-300 bg-rose-500/15' },
-  sql_error: { icon: <TriangleAlert className="h-3.5 w-3.5" />, ring: 'text-amber-300 bg-amber-500/15' },
-  hypothesis_status: { icon: <Wand2 className="h-3.5 w-3.5" />, ring: 'text-violet-300 bg-violet-500/15' },
-  cap_revoked: { icon: <Lock className="h-3.5 w-3.5" />, ring: 'text-slate-300 bg-slate-500/15' },
-  stop: { icon: <Flag className="h-3.5 w-3.5" />, ring: 'text-cyan-300 bg-cyan-500/15' },
+const EVENT_STYLE: Record<string, { icon: ReactNode; tone: string }> = {
+  plan: { icon: <Compass className="h-3.5 w-3.5" />, tone: 'text-fg-2' },
+  cap_granted: { icon: <KeyRound className="h-3.5 w-3.5" />, tone: 'text-accent' },
+  policy_denied: { icon: <Ban className="h-3.5 w-3.5" />, tone: 'text-bad' },
+  query_ok: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, tone: 'text-good' },
+  gateway_denied: { icon: <ShieldAlert className="h-3.5 w-3.5" />, tone: 'text-bad' },
+  sql_error: { icon: <TriangleAlert className="h-3.5 w-3.5" />, tone: 'text-warn' },
+  hypothesis_status: { icon: <ListChecks className="h-3.5 w-3.5" />, tone: 'text-fg-2' },
+  cap_revoked: { icon: <Lock className="h-3.5 w-3.5" />, tone: 'text-subtle' },
+  stop: { icon: <Flag className="h-3.5 w-3.5" />, tone: 'text-fg' },
 }
 
 function describe(ev: IgEvent): { title: ReactNode; detail?: ReactNode } | null {
   const col = (r: string) => r.split('.').pop()
   switch (ev.kind) {
-    case 'plan': return { title: <>Planner picks <b>{ev.hypothesis}</b></>, detail: `priority ${ev.priority}` }
+    case 'plan': return { title: <>Planner picks <b className="font-medium">{ev.hypothesis}</b></>, detail: `priority ${ev.priority}` }
     case 'cap_granted': return {
-      title: <>Capability granted → <b>{ev.hypothesis}</b></>,
-      detail: <span className="flex flex-wrap gap-1">{Object.entries(ev.resources as Record<string, string>).map(([r, m]) =>
+      title: <>Capability granted to <b className="font-medium">{ev.hypothesis}</b></>,
+      detail: <span className="mt-1 flex flex-wrap items-center gap-1">{Object.entries(ev.resources as Record<string, string>).map(([r, m]) =>
         <Chip key={r} mono tone={m === 'aggregate_only' ? 'warn' : 'default'}>{col(r)}{m === 'aggregate_only' ? ' · count-only' : ''}</Chip>)}
-        <span className="text-slate-500">TTL {ev.ttl_s}s</span></span>,
+        <span className="text-subtle">TTL {ev.ttl_s}s</span></span>,
     }
-    case 'policy_denied': return { title: <>Policy <b className="text-rose-300">DENY {ev.check}</b> · {ev.hypothesis}</>, detail: ev.reason }
+    case 'policy_denied': return { title: <>Policy <b className="font-medium text-bad">denied {ev.check}</b> · {ev.hypothesis}</>, detail: ev.reason }
     case 'query_ok': return { title: <>Query ran · {ev.rows} rows</>, detail: `${ev.columns.length} columns checked in ${Number(ev.latency_ms).toFixed(1)} ms` }
-    case 'gateway_denied': return { title: <>Gateway <b className="text-rose-300">blocked</b> {ev.hypothesis}</>, detail: ev.reason }
+    case 'gateway_denied': return { title: <>Gateway <b className="font-medium text-bad">blocked</b> {ev.hypothesis}</>, detail: ev.reason }
     case 'sql_error': return { title: 'Query rejected, retrying', detail: ev.error }
-    case 'hypothesis_status': return { title: <><b>{ev.hypothesis.id}</b> → <StatusBadge status={ev.hypothesis.status} /></> }
-    case 'cap_revoked': return { title: <>Revoked capability for <b>{ev.hypothesis}</b></>, detail: String(ev.reason) }
-    case 'stop': return { title: 'Investigation finished', detail: ev.reason }
+    case 'hypothesis_status': return { title: <span className="flex items-center gap-2"><b className="font-medium">{ev.hypothesis.id}</b><StatusBadge status={ev.hypothesis.status} /></span> }
+    case 'cap_revoked': return { title: <>Revoked capability for <b className="font-medium">{ev.hypothesis}</b></>, detail: String(ev.reason) }
+    case 'stop': return { title: <b className="font-medium">Investigation finished</b>, detail: ev.reason }
     default: return null
   }
 }
@@ -229,17 +213,17 @@ function Timeline({ events }: { events: IgEvent[] }) {
   useEffect(() => { end.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }) }, [events.length])
   const items = events.map((ev, i) => ({ ev, i, d: describe(ev) })).filter(x => x.d)
   return (
-    <div className="relative max-h-[640px] min-h-[200px] flex-1 overflow-y-auto pr-1">
+    <div className="relative max-h-[640px] min-h-[200px] overflow-y-auto pr-1">
       {items.length === 0 && <Skeleton />}
-      <ol className="relative space-y-1 before:absolute before:bottom-2 before:left-[13px] before:top-2 before:w-px before:bg-white/[0.07]">
+      <ol className="relative before:absolute before:bottom-3 before:left-[11px] before:top-3 before:w-px before:bg-line">
         {items.map(({ ev, i, d }) => {
           const s = EVENT_STYLE[ev.kind]
           return (
-            <li key={i} className="relative flex gap-3 py-1.5 animate-fade-in">
-              <span className={clsx('relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-lg ring-4 ring-ink-900', s.ring)}>{s.icon}</span>
+            <li key={i} className="relative flex gap-3 py-2 animate-fade-in">
+              <span className={clsx('relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line bg-surface', s.tone)}>{s.icon}</span>
               <div className="min-w-0 pt-0.5">
-                <div className="text-[13px] text-slate-200">{d!.title}</div>
-                {d!.detail && <div className="mt-0.5 text-[12px] leading-relaxed text-slate-500">{d!.detail}</div>}
+                <div className="text-[13px] text-fg">{d!.title}</div>
+                {d!.detail && <div className="mt-0.5 text-[12px] leading-relaxed text-muted">{d!.detail}</div>}
               </div>
             </li>
           )

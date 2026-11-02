@@ -100,7 +100,7 @@ def orchestration_mermaid(graph) -> str:
         arrow = "-.->" if e.conditional else "-->"
         lines.append(f'  {ids.get(e.source, e.source)} {arrow}{f"|{chr(34)}{label}{chr(34)}|" if label else ""} '
                      f'{ids.get(e.target, e.target)}')
-    lines += ["  classDef llm fill:#3b1d2e,stroke:#f472b6,color:#fde7f3",
-              "  classDef code fill:#0f2e26,stroke:#34d399,color:#d1fae5",
-              "  classDef term fill:#1e293b,stroke:#64748b,color:#cbd5e1"]
+    lines += ["  classDef llm fill:#fdf3e6,stroke:#c48a3f,color:#5a3a12",
+              "  classDef code fill:#eaf4ee,stroke:#5c9a74,color:#173d27",
+              "  classDef term fill:#f3f2ef,stroke:#b5b1a8,color:#1b1a18"]
     return "\n".join(lines)

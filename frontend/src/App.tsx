@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { ChevronDown, Database, GitCompareArrows, MessageSquareText, Network, ScanSearch, ShieldCheck, Sparkles } from 'lucide-react'
+import { BookOpen, ChevronsUpDown, Database, GitCompareArrows, MessageSquareText, ScanSearch } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
-import { ErrorNote } from './components/ui'
+import { Empty, ErrorNote, Segmented } from './components/ui'
 import Ask from './pages/Ask'
 import Compare from './pages/Compare'
 import Data from './pages/Data'
@@ -11,17 +11,27 @@ import { useStore } from './store'
 const HowItWorks = lazy(() => import('./pages/HowItWorks'))
 
 type Page = 'investigate' | 'ask' | 'compare' | 'data' | 'how'
-const NAV: { id: Page; label: string; icon: ReactNode; hint: string }[] = [
-  { id: 'investigate', label: 'Investigate', icon: <ScanSearch className="h-4 w-4" />, hint: 'Why did a number change?' },
-  { id: 'ask', label: 'Ask your data', icon: <MessageSquareText className="h-4 w-4" />, hint: 'Plain-English questions' },
-  { id: 'compare', label: 'Scoped vs open', icon: <GitCompareArrows className="h-4 w-4" />, hint: 'Privilege–utility trade-off' },
-  { id: 'data', label: 'Data & catalogue', icon: <Database className="h-4 w-4" />, hint: 'Upload, connect, label' },
-  { id: 'how', label: 'How it works', icon: <Network className="h-4 w-4" />, hint: 'Architecture & LangGraph' },
+const NAV: { id: Page; label: string; icon: ReactNode }[] = [
+  { id: 'investigate', label: 'Investigate', icon: <ScanSearch className="h-4 w-4" /> },
+  { id: 'ask', label: 'Ask your data', icon: <MessageSquareText className="h-4 w-4" /> },
+  { id: 'compare', label: 'Scoped vs open', icon: <GitCompareArrows className="h-4 w-4" /> },
+  { id: 'data', label: 'Data & catalogue', icon: <Database className="h-4 w-4" /> },
+  { id: 'how', label: 'How it works', icon: <BookOpen className="h-4 w-4" /> },
 ]
 
 const pageFromHash = (): Page => {
   const h = window.location.hash.replace('#/', '') as Page
   return NAV.some(n => n.id === h) ? h : 'investigate'
+}
+
+function Logo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden>
+      <rect width="64" height="64" rx="14" fill="#1b1a18" />
+      <path d="M32 14l14 5.5v10.5c0 9.6-6 16.8-14 20-8-3.2-14-10.4-14-20V19.5z" fill="none" stroke="#f6f5f2" strokeWidth="3.5" strokeLinejoin="round" />
+      <circle cx="32" cy="31" r="4" fill="#5fb3c9" />
+    </svg>
+  )
 }
 
 export default function App() {
@@ -33,110 +43,86 @@ export default function App() {
     return () => window.removeEventListener('hashchange', on)
   }, [])
   const go = (p: Page) => { window.location.hash = `/${p}`; setPage(p) }
-  const active = NAV.find(n => n.id === page)!
 
   return (
     <div className="flex min-h-screen">
       {/* sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-white/[0.06] bg-ink-950/70 backdrop-blur-xl lg:flex">
-        <div className="flex items-center gap-3 px-5 pb-4 pt-6">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-400 to-cyan-400 shadow-lg shadow-indigo-500/30">
-            <ShieldCheck className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <div className="text-[17px] font-extrabold tracking-tight text-white">InvestiGuard</div>
-            <div className="text-[11px] text-slate-400">Least-privilege analytics agent</div>
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-canvas lg:flex">
+        <div className="flex items-center gap-2.5 px-5 pb-6 pt-5">
+          <Logo className="h-7 w-7" />
+          <div className="leading-tight">
+            <div className="text-[15px] font-semibold tracking-tight text-fg">InvestiGuard</div>
+            <div className="text-[11px] text-subtle">Least-privilege analytics</div>
           </div>
         </div>
 
-        <nav className="space-y-1 px-3 py-2">
+        <div className="eyebrow px-5 pb-2">Workspace</div>
+        <nav className="space-y-0.5 px-3">
           {NAV.map(n => (
             <button key={n.id} onClick={() => go(n.id)}
-              className={clsx('group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition',
-                page === n.id ? 'bg-gradient-to-r from-indigo-500/20 to-cyan-500/5 text-white ring-1 ring-indigo-400/25'
-                  : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-100')}>
-              <span className={clsx('grid h-8 w-8 place-items-center rounded-lg transition',
-                page === n.id ? 'bg-indigo-500/25 text-indigo-200' : 'bg-white/[0.04] text-slate-400 group-hover:text-slate-200')}>
-                {n.icon}
-              </span>
-              <span>
-                <span className="block text-sm font-semibold">{n.label}</span>
-                <span className="block text-[11px] text-slate-500">{n.hint}</span>
-              </span>
+              className={clsx('flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[13.5px] transition',
+                page === n.id ? 'bg-surface font-medium text-fg shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(27_26_24/0.05)]'
+                  : 'text-muted hover:bg-sunken hover:text-fg')}>
+              <span className={page === n.id ? 'text-accent' : 'text-subtle'}>{n.icon}</span>
+              {n.label}
             </button>
           ))}
         </nav>
 
-        <div className="mt-auto space-y-4 border-t border-white/[0.06] p-5">
+        <div className="mt-auto space-y-5 border-t border-line px-5 py-5">
           <div>
             <div className="label">Access mode</div>
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/[0.04] p-1 ring-1 ring-white/10">
-              {(['C', 'A'] as const).map(m => (
-                <button key={m} onClick={() => setMode(m)}
-                  className={clsx('rounded-lg px-2 py-1.5 text-xs font-semibold transition',
-                    mode === m ? (m === 'C' ? 'bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-400/30'
-                      : 'bg-rose-500/20 text-rose-200 ring-1 ring-rose-400/30') : 'text-slate-400 hover:text-slate-200')}>
-                  {m === 'C' ? 'Scoped' : 'Unrestricted'}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[11px] leading-snug text-slate-500">
-              {mode === 'C' ? 'Each hypothesis gets only the columns it needs.' : 'Baseline for comparison: every column is open.'}
+            <Segmented value={mode} onChange={setMode}
+              options={[{ id: 'C', label: 'Scoped' }, { id: 'A', label: 'Unrestricted' }]} />
+            <p className="mt-2 flex items-start gap-1.5 text-[11.5px] leading-snug text-muted">
+              <span className={clsx('mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full', mode === 'C' ? 'bg-good' : 'bg-bad')} />
+              {mode === 'C' ? 'Each hypothesis gets only the columns it needs.' : 'Baseline: every column is open.'}
             </p>
           </div>
           <div>
             <div className="label">Model</div>
-            <input className="input py-2 font-mono text-xs" value={model} onChange={e => setModel(e.target.value)} />
+            <input className="input h-8 py-1 font-mono text-xs" value={model} onChange={e => setModel(e.target.value)} />
           </div>
         </div>
       </aside>
 
       {/* main */}
       <main className="min-w-0 flex-1">
-        <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-ink-950/70 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-[1400px] items-center gap-4 px-6 py-3.5">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-500">{active.icon}</span>
-              <span className="font-semibold text-slate-100">{active.label}</span>
-            </div>
-            <div className="ml-auto flex items-center gap-3">
-              {dataset && (
-                <div className="hidden items-center gap-2 md:flex">
-                  <Pill>{dataset.tables} tables</Pill>
-                  <Pill>{dataset.columns} columns</Pill>
-                  <Pill tone="warn">{dataset.sensitive} sensitive</Pill>
-                </div>
-              )}
-              <div className="relative">
-                <Database className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-300" />
-                <select value={dataset?.name ?? ''} onChange={e => setDataset(e.target.value)}
-                  className="input w-72 appearance-none py-2 pl-9 pr-9 font-medium">
-                  {datasets.map(d => <option key={d.name} value={d.name}>{d.label}</option>)}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <header className="sticky top-0 z-20 border-b border-line bg-canvas/85 backdrop-blur-md">
+          <div className="mx-auto flex max-w-[1280px] items-center gap-4 px-8 py-3">
+            <div className="flex items-center gap-2 lg:hidden"><Logo className="h-6 w-6" /><span className="text-sm font-semibold">InvestiGuard</span></div>
+            {dataset && (
+              <div className="hidden items-center gap-3 text-xs text-muted md:flex">
+                <span>{dataset.tables} tables</span><span className="text-line-strong">/</span>
+                <span>{dataset.columns} columns</span><span className="text-line-strong">/</span>
+                <span className="text-warn">{dataset.sensitive} sensitive</span>
               </div>
+            )}
+            <div className="relative ml-auto">
+              <Database className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-subtle" />
+              <select value={dataset?.name ?? ''} onChange={e => setDataset(e.target.value)}
+                className="input h-8 w-72 appearance-none py-1 pl-8 pr-8 text-[13px] font-medium">
+                {datasets.map(d => <option key={d.name} value={d.name}>{d.label}</option>)}
+              </select>
+              <ChevronsUpDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-subtle" />
             </div>
           </div>
           <div className="flex gap-1 overflow-x-auto px-4 pb-2 lg:hidden">
             {NAV.map(n => (
               <button key={n.id} onClick={() => go(n.id)}
-                className={clsx('flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold',
-                  page === n.id ? 'bg-indigo-500/20 text-white' : 'text-slate-400')}>
+                className={clsx('flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium',
+                  page === n.id ? 'bg-surface text-fg shadow-[0_0_0_1px_var(--color-line)]' : 'text-muted')}>
                 {n.icon}{n.label}
               </button>
             ))}
           </div>
         </header>
 
-        <div className="mx-auto max-w-[1400px] px-6 py-6">
+        <div className="mx-auto max-w-[1280px] px-8 py-8">
           {loadError && <div className="mb-6"><ErrorNote error={loadError} /></div>}
           {!dataset && !loadError && page !== 'data' && page !== 'how' ? (
-            <div className="card flex flex-col items-center p-12 text-center">
-              <Sparkles className="mb-3 h-8 w-8 text-indigo-300" />
-              <div className="text-lg font-semibold text-white">Add your first dataset</div>
-              <p className="mt-1 text-sm text-slate-400">Upload a CSV, Excel, JSON or Parquet file, or connect a database.</p>
-              <button onClick={() => go('data')} className="mt-4 text-sm font-semibold text-indigo-300 hover:text-indigo-200">Go to Data →</button>
-            </div>
+            <Empty icon={<Database className="h-6 w-6" />} title="Add your first dataset"
+              text="Upload a CSV, Excel, JSON or Parquet file, or connect a database, from the Data & catalogue page." />
           ) : (
             <div key={page} className="animate-fade-in">
               {page === 'investigate' && <Investigate />}
@@ -149,14 +135,5 @@ export default function App() {
         </div>
       </main>
     </div>
-  )
-}
-
-function Pill({ children, tone }: { children: ReactNode; tone?: 'warn' }) {
-  return (
-    <span className={clsx('rounded-full px-2.5 py-1 text-[11px] font-medium ring-1',
-      tone === 'warn' ? 'bg-amber-500/10 text-amber-200 ring-amber-500/20' : 'bg-white/[0.04] text-slate-300 ring-white/10')}>
-      {children}
-    </span>
   )
 }
