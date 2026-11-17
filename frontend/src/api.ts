@@ -32,6 +32,9 @@ export interface Hypothesis {
   blocked_reason: string | null
   finding: string | null
   explained_share: number
+  confidence?: number | null
+  focus?: string
+  auto?: boolean
 }
 
 export interface IgEvent {
@@ -49,6 +52,25 @@ export interface Exposure {
   queries_denied: number
   gateway_p50_ms: number | null
   capabilities_issued: number
+  injections_blocked?: number
+}
+
+/** Columns open to the agent over the run; column_seconds is the area under the curve. */
+export interface Privilege {
+  column_seconds: number
+  sensitive_column_seconds: number
+  peak_columns: number
+  duration_s?: number
+  curve: { t: number; columns: number; sensitive: number }[]
+  grants: { hypothesis: string; start: number; end: number; columns: number }[]
+}
+
+export interface Receipt { run_id: string; entries: number; root_hash: string; algorithm: string; sealed_at: number; signature: string }
+export interface LedgerView {
+  receipt: Receipt
+  verification: { valid: boolean; checks: Record<string, boolean>; recomputed_root: string }
+  tampered: boolean
+  entries: { i: number; t: number; kind: string; hypothesis: string | null; hash: string }[]
 }
 
 export interface Report {
@@ -75,20 +97,41 @@ export interface EvidenceNode {
   verdict: Status
   explained_share: number
   finding: string
-  stats: null | {
-    verdict: Status
-    reason: string
-    explained_share: number
-    top_segment: string
-    driver_delta: number
-    total_baseline: number
-    total_incident: number
-    total_delta: number
-    base_share: number
-    lift: number | null
-    possible_relabel: boolean
-    top_movers: { segment: string; baseline: number; incident: number; delta: number }[]
-  }
+  stats: null | EvidenceStats
+}
+
+export interface EvidenceStats {
+  kind?: 'decomposition' | 'price_volume' | 'timeline'
+  verdict: Status
+  reason: string
+  explained_share: number
+  top_segment: string
+  // decomposition
+  driver_delta: number
+  total_baseline: number
+  total_incident: number
+  total_delta: number
+  base_share: number
+  lift: number | null
+  significance_z?: number | null
+  confidence?: number
+  possible_relabel: boolean
+  top_movers: { segment: string; baseline: number; incident: number; delta: number }[]
+  // price vs volume
+  main_effect?: 'price' | 'volume'
+  volume_effect?: number
+  price_effect?: number
+  volume_share?: number
+  price_share?: number
+  qty_change_pct?: number
+  price_change_pct?: number
+  // timeline
+  onset_period?: string
+  before_mean?: number
+  after_mean?: number
+  step_strength?: number
+  specific_to_segment?: boolean
+  series?: { period: string; segment: number; rest: number }[]
 }
 
 export interface GatewayRecord {
@@ -107,6 +150,9 @@ export interface InvestigationResult {
   evidence: EvidenceNode[]
   gateway_log: GatewayRecord[]
   steps?: DirectStep[]
+  privilege?: Privilege
+  receipt?: Receipt
+  firewall?: { column: string; pattern: string; snippet: string; hypothesis: string }[]
 }
 
 /** One free-form query in a Direct AI run (no hypothesis, no verdict). */
@@ -145,7 +191,26 @@ export interface AskAnswer {
   y: string
   granted: Record<string, string>
   attempts: { attempt: number; sql: string; result: string; declared?: string[] }[]
+  analysis?: { code: string; ok: boolean; error: string; seconds: number; isolation: string } | null
+  injections_blocked?: { column: string; pattern: string; snippet: string }[]
 }
+
+export interface BenchRow {
+  scenario: string; title: string; mode: Mode; truth: string; error: string | null; root_cause: string
+  correct: boolean; mechanism_correct?: boolean; trapped?: boolean; injection_obeyed?: boolean
+  columns_touched: number; columns_total: number; exposure: number; sensitive_raw: string[]
+  injections_blocked: number; queries_denied: number; column_seconds: number; sensitive_column_seconds: number
+  seconds: number; llm_calls: number
+}
+export interface BenchSummary {
+  runs: number; errors?: number; accuracy: number; mechanism_accuracy: number | null; trapped: number; injections_obeyed: number
+  avg_exposure: number; sensitive_raw_columns: number; avg_column_seconds: number; avg_seconds: number; avg_llm_calls: number
+}
+export interface Benchmark {
+  state: { status: 'idle' | 'running'; progress: { done: number; total: number; scenario: string; mode: Mode } | null; error: string | null }
+  results: { model: string; finished_at: number; rows: BenchRow[]; summary: Record<string, BenchSummary> } | null
+}
+export interface SystemStatus { sandbox: { available: boolean; reason: string }; sandbox_image: string }
 
 export interface ColumnMeta { type?: string; sensitivity: string; description?: string }
 export interface CatalogRaw {
@@ -162,7 +227,7 @@ export interface Architecture {
   stop: { share: number; iterations: number }
 }
 
-export interface CompareRow { mode: Mode; root_cause: string; exposure: Exposure; verified: boolean; seconds: number; problem: string }
+export interface CompareRow { mode: Mode; root_cause: string; exposure: Exposure; privilege?: Privilege | null; verified: boolean; seconds: number; problem: string }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
@@ -192,8 +257,14 @@ export const api = {
   connect: (body: { name: string; label: string; url: string; currency: string; describe: boolean; model: string }) =>
     req<{ dataset: string; tables: number }>('/api/datasets/connect', json(body)),
   ask: (body: { dataset: string; question: string; mode: Mode; model: string }) => req<AskAnswer>('/api/ask', json(body)),
-  investigate: (body: { dataset: string; problem: string; mode: Mode; model: string }) =>
+  investigate: (body: { dataset: string; problem: string; mode: Mode; model: string; approvals: boolean }) =>
     req<{ id: string }>('/api/investigations', json(body)),
+  approve: (id: string, hypothesis: string, approve: boolean) =>
+    req<{ ok: boolean }>(`/api/investigations/${id}/approvals`, json({ hypothesis, approve })),
+  ledger: (id: string, tamper = false) => req<LedgerView>(`/api/investigations/${id}/ledger?tamper=${tamper}`),
+  system: () => req<SystemStatus>('/api/system'),
+  benchmark: () => req<Benchmark>('/api/benchmark'),
+  runBenchmark: (model: string) => req<{ ok: boolean }>('/api/benchmark/run', json({ model })),
   investigation: (id: string) => req<Investigation>(`/api/investigations/${id}`),
   compare: (ds: string) => req<CompareRow[]>(`/api/compare/${ds}`),
   architecture: (ds: string) => req<Architecture>(`/api/architecture/${ds}`),

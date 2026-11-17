@@ -16,6 +16,8 @@ class Objective(BaseModel):
     change_pct: float = Field(description="Reported change in percent, negative for a fall")
     metric_columns: list[str] = Field(description="table.column needed to compute the metric over the two periods "
                                                   "(amount/value, date or period column, and any status/type filter)")
+    quantity_column: str = Field(default="", description="table.column holding the physical quantity / units behind "
+                                                         "the metric (for a price-vs-volume split), or empty if none")
 
 
 class ProposedHypothesis(BaseModel):
@@ -35,14 +37,14 @@ class Hypotheses(BaseModel):
 
 class QueryPlan(BaseModel):
     sql: str = Field(description="One read-only SELECT statement")
-    rationale: str = Field(description="What the result will show")
+    rationale: str = Field(default="", description="What the result will show")
 
 
 class Interpretation(BaseModel):
     finding: str = Field(description="One or two sentences citing the numbers from the result")
     verdict: Literal["SUPPORTED", "REJECTED", "INCONCLUSIVE"] = Field(
         description="Used only for 'event' hypotheses; decomposition verdicts are computed in code")
-    follow_ups: list[ProposedHypothesis] = Field(description="Narrower follow-up hypotheses, at most 2; empty if none")
+    follow_ups: list[ProposedHypothesis] = Field(default_factory=list, description="Narrower follow-up hypotheses, at most 2; empty if none")
 
 
 class Claim(BaseModel):

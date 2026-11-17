@@ -1,10 +1,12 @@
 import clsx from 'clsx'
 import {
-  ArrowRight, Ban, Bot, CheckCircle2, ChevronRight, Compass, Flag, KeyRound, ListChecks, Lock, ScanSearch, ShieldAlert,
-  TriangleAlert,
+  ArrowRight, Ban, CheckCircle2, ChevronRight, Compass, Flag, KeyRound, ListChecks, Lock, ScanSearch, ShieldAlert,
+  ShieldQuestion, ShieldX, TriangleAlert,
 } from 'lucide-react'
+import { BotMark as Bot } from '../components/brand'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DirectStep, Hypothesis, IgEvent } from '../api'
+import { ApprovalBanner } from '../components/Insight'
 import { Button, Card, Chip, Empty, ErrorNote, PageHeader, SectionTitle, StatusBadge } from '../components/ui'
 import { useStore } from '../store'
 import ReportView from './ReportView'
@@ -61,6 +63,15 @@ export default function Investigate() {
     try { await startRun(problem) } catch (e) { setStartError((e as Error).message) } finally { setStarting(false) }
   }
   const running = run?.status === 'running'
+  // A step-up approval is open while the latest request for a hypothesis has no decision yet.
+  const [answered, setAnswered] = useState<string[]>([])
+  const pending = useMemo(() => {
+    const ev = run?.events ?? []
+    const asks = ev.filter(e => e.kind === 'approval_requested')
+    const last = asks[asks.length - 1]
+    if (!last || !running || ev.some(e => e.kind === 'approval_decided' && e.hypothesis === last.hypothesis)) return null
+    return answered.includes(`${run!.id}:${last.hypothesis}`) ? null : last
+  }, [run, running, answered])
 
   return (
     <div className="space-y-8">
@@ -123,6 +134,11 @@ export default function Investigate() {
           </div>
         )}
       </Card>
+
+      {pending && run && (
+        <ApprovalBanner runId={run.id} ask={pending as never}
+          onDone={() => setAnswered(a => [...a, `${run.id}:${pending.hypothesis}`])} />
+      )}
 
       {!run ? (
         <Empty icon={<ScanSearch className="h-6 w-6" />} title="No investigation yet"
@@ -213,6 +229,10 @@ function HypothesisCard({ h, active }: { h: Hypothesis; active: boolean }) {
             <StatusBadge status={h.status} />
             {h.parent && <Chip>drill-down of {h.parent}</Chip>}
             {h.kind === 'event' && <Chip>event lookup</Chip>}
+            {h.kind === 'timeline' && <Chip>timing · added by code</Chip>}
+            {h.kind === 'price_volume' && <Chip>price vs volume · added by code</Chip>}
+            {h.status === 'SUPPORTED' && h.confidence != null && h.confidence > 0 &&
+              <Chip>confidence {(h.confidence * 100).toFixed(0)}%</Chip>}
             {h.status === 'SUPPORTED' && h.explained_share > 0 &&
               <Chip tone="accent">explains {(h.explained_share * 100).toFixed(0)}%</Chip>}
           </div>
@@ -239,6 +259,9 @@ function HypothesisCard({ h, active }: { h: Hypothesis; active: boolean }) {
 const EVENT_STYLE: Record<string, { icon: ReactNode; tone: string }> = {
   plan: { icon: <Compass className="h-3.5 w-3.5" />, tone: 'text-fg-2' },
   direct_step: { icon: <Bot className="h-3.5 w-3.5" />, tone: 'text-warn' },
+  injection_blocked: { icon: <ShieldX className="h-3.5 w-3.5" />, tone: 'text-bad' },
+  approval_requested: { icon: <ShieldQuestion className="h-3.5 w-3.5" />, tone: 'text-warn' },
+  approval_decided: { icon: <ShieldQuestion className="h-3.5 w-3.5" />, tone: 'text-fg-2' },
   cap_granted: { icon: <KeyRound className="h-3.5 w-3.5" />, tone: 'text-accent' },
   policy_denied: { icon: <Ban className="h-3.5 w-3.5" />, tone: 'text-bad' },
   query_ok: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, tone: 'text-good' },
@@ -261,8 +284,14 @@ function describe(ev: IgEvent): { title: ReactNode; detail?: ReactNode } | null 
       title: <>Capability granted to <b className="font-medium">{ev.hypothesis}</b></>,
       detail: <span className="mt-1 flex flex-wrap items-center gap-1">{Object.entries(ev.resources as Record<string, string>).map(([r, m]) =>
         <Chip key={r} mono tone={m === 'aggregate_only' ? 'warn' : 'default'}>{col(r)}{m === 'aggregate_only' ? ' · count-only' : ''}</Chip>)}
-        <span className="text-subtle">TTL {ev.ttl_s}s</span></span>,
+        <span className="text-subtle">TTL {ev.ttl_s}s{ev.approved_by_analyst ? ' · approved by you' : ''}</span></span>,
     }
+    case 'injection_blocked': return {
+      title: <>Firewall <b className="font-medium text-bad">masked {ev.count} instruction-like cell{ev.count > 1 ? 's' : ''}</b> in {ev.hypothesis}</>,
+      detail: <>in {ev.columns.join(', ')}: “{String(ev.sample).slice(0, 70)}…”</>,
+    }
+    case 'approval_requested': return { title: <>Waiting for your approval · <b className="font-medium">{ev.hypothesis}</b></>, detail: `${ev.check}: ${ev.reason}` }
+    case 'approval_decided': return { title: <>You <b className={ev.approved ? 'font-medium text-good' : 'font-medium text-bad'}>{ev.approved ? 'approved' : 'denied'}</b> {ev.hypothesis}</> }
     case 'policy_denied': return { title: <>Policy <b className="font-medium text-bad">denied {ev.check}</b> · {ev.hypothesis}</>, detail: ev.reason }
     case 'query_ok': return { title: <>Query ran · {ev.rows} rows</>, detail: `${ev.columns.length} columns checked in ${Number(ev.latency_ms).toFixed(1)} ms` }
     case 'gateway_denied': return { title: <>Gateway <b className="font-medium text-bad">blocked</b> {ev.hypothesis}</>, detail: ev.reason }

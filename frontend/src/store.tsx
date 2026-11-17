@@ -19,6 +19,8 @@ interface Store {
   setMode: (m: Mode) => void
   model: string
   setModel: (m: string) => void
+  approvals: boolean                             // ask before an evidence-gate / budget denial is final
+  setApprovals: (v: boolean) => void
   runs: Record<string, RunState>                 // key: `${dataset}:${mode}`
   startRun: (problem: string) => Promise<void>
   asks: Record<string, AskAnswer[]>              // key: dataset
@@ -41,6 +43,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState(saved('ig.dataset', ''))
   const [mode, setModeState] = useState<Mode>(saved('ig.mode', 'C') as Mode)
   const [model, setModelState] = useState(saved('ig.model', ''))
+  const [approvals, setApprovalsState] = useState(saved('ig.approvals', '0') === '1')
   const [runs, setRuns] = useState<Record<string, RunState>>({})
   const [asks, setAsks] = useState<Record<string, AskAnswer[]>>({})
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -72,7 +75,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!dataset) return
     const key = `${dataset.name}:${mode}`
     sources.current[key]?.close()
-    const { id } = await api.investigate({ dataset: dataset.name, problem, mode, model })
+    const { id } = await api.investigate({ dataset: dataset.name, problem, mode, model, approvals })
     setRuns(r => ({ ...r, [key]: { id, problem, events: [], status: 'running', investigation: null, error: null } }))
     const es = new EventSource(`/api/investigations/${id}/events`)
     sources.current[key] = es
@@ -88,7 +91,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         : r))
     })
     es.onerror = () => { /* the browser retries automatically; 'end' closes it */ }
-  }, [dataset, mode, model])
+  }, [dataset, mode, model, approvals])
 
   const value = useMemo<Store>(() => ({
     datasets, dataset, loadError,
@@ -96,9 +99,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     reloadDatasets,
     mode, setMode: m => { setModeState(m); save('ig.mode', m) },
     model, setModel: m => { setModelState(m); save('ig.model', m) },
+    approvals, setApprovals: v => { setApprovalsState(v); save('ig.approvals', v ? '1' : '0') },
     runs, startRun,
     asks, addAsk: a => dataset && setAsks(s => ({ ...s, [dataset.name]: [a, ...(s[dataset.name] ?? [])] })),
-  }), [datasets, dataset, loadError, reloadDatasets, mode, model, runs, startRun, asks])
+  }), [datasets, dataset, loadError, reloadDatasets, mode, model, approvals, runs, startRun, asks])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

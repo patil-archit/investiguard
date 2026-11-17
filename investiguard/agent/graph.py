@@ -7,12 +7,12 @@ Every routing decision is a plain function of state; the LLM never routes or gra
 import operator
 import time
 from dataclasses import dataclass, field
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Callable, TypedDict
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
-from .. import config
+from .. import config, firewall
 from ..capabilities import CapabilityStore
 from ..catalog import SENSITIVITY_WEIGHT, Catalog
 from ..gateway import Gateway, GatewayDenied
@@ -23,6 +23,9 @@ from . import evidence as evidence_mod
 from .schemas import Hypotheses, Interpretation, Objective, ProposedHypothesis, QueryPlan, Report
 
 TERMINAL = {"SUPPORTED", "REJECTED", "INCONCLUSIVE"}
+_NOT_A_DIMENSION = ("id", "_id", "name", "email", "phone", "description", "desc", "comment", "message", "note",
+                    "reason", "address", "text", "body", "title", "url", "_no", "number", "code")
+SWEEP_MAX = 4
 _PERIOD_HINTS = ("date", "time", "_at", "_ts", "year", "month", "period", "fy")
 
 
@@ -59,6 +62,10 @@ class Runtime:
     currency: str = "INR"
     store: CapabilityStore = field(default_factory=CapabilityStore)
     gateway: Gateway | None = None
+    # Step-up approval: called with a P4/P5 denial; returns True if the analyst approves it. None = never ask.
+    approver: Callable[[dict], bool] | None = None
+    firewall_hits: list[dict] = field(default_factory=list)
+    totals: list[tuple[float, float]] = field(default_factory=list)  # ALL rows of accepted decompositions
 
     def __post_init__(self):
         self.policy = AllowAllPolicy(self.catalog) if self.mode == "A" else InvestiGuardPolicy(self.catalog)
@@ -89,7 +96,7 @@ def build_graph(rt: Runtime):
                        metric_cols: list[str]) -> tuple[dict, list]:
         hyps, events = dict(existing), []
         for p in proposed:
-            if len(hyps) >= 12:
+            if len(hyps) >= 16:
                 break
             driver = clean_resources(p.resources)
             if not driver:
@@ -116,6 +123,35 @@ def build_graph(rt: Runtime):
             events.append(_event("hypothesis_proposed", hypothesis=dict(hyps[hid])))
         return hyps, events
 
+    def auto_drills(hyps: dict, parent: dict, stats: dict, sql: str, objective: dict) -> tuple[dict, list]:
+        """Code-generated drill-downs on a supported segment: when did it start, and is it price or volume?
+
+        They reuse the parent's columns (plus the quantity column), so they cost no extra privilege class,
+        and their verdicts come from the evidence engine like any decomposition.
+        """
+        hyps, events = dict(hyps), []
+        focus = stats["top_segment"]
+        wanted = [("timeline", f"When did '{focus}' start to change, and did anything else move at that time?", [])]
+        if objective.get("quantity_column"):
+            wanted.append(("price_volume", f"Is the change in '{focus}' due to quantity or to price per unit?",
+                           [objective["quantity_column"]]))
+        for kind, statement, extra in wanted:
+            if len(hyps) >= 14 or any(h.get("kind") == kind and h.get("focus") == focus for h in hyps.values()):
+                continue
+            res = clean_resources(parent["resources"] + extra)
+            hid = f"H{len(hyps) + 1}"
+            cost = sum(SENSITIVITY_WEIGHT[cat.sensitivity(r)] for r in res)
+            hyps[hid] = {
+                "id": hid, "statement": statement, "driver": f"{focus}: {kind.replace('_', ' vs ')}", "kind": kind,
+                "resources": res, "plausibility": 0.9, "info_gain": 0.6, "privilege_cost": cost,
+                "status": "PROPOSED", "parent": parent["id"], "blocked_reason": None, "gate_retried": False,
+                "finding": None, "confidence": None, "explained_share": 0.0, "evidence_id": None,
+                "focus": focus, "parent_sql": sql, "auto": True,
+                "priority": round(0.9 * 0.6 / (1 + config.PLANNER_LAMBDA * cost), 4),
+            }
+            events.append(_event("hypothesis_proposed", hypothesis=dict(hyps[hid])))
+        return hyps, events
+
     # ---------------- LLM nodes ----------------
     def understand(state: InvState):
         obj = rt.llm.ask(Objective, prompts.SYSTEM, prompts.understand(state["problem"], cat.describe())).model_dump()
@@ -127,13 +163,48 @@ def build_graph(rt: Runtime):
                            if _is_period(f"{t}.{c}", m.get("type", ""))), None)
             cols += [period] if period else []
         obj["metric_columns"] = cols
+        obj["quantity_column"] = cat.resolve(obj.get("quantity_column") or "") or ""
         return {"objective": obj, "iteration": 0, "events": [_event("objective", objective=obj)]}
+
+    def dimension_sweep(hyps: dict, metric_cols: list[str]) -> tuple[dict, list]:
+        """Coverage guarantee: every non-sensitive categorical column of the metric's table, or of a table that
+        joins to it, gets a cheap decomposition test, even if the LLM never thought of it. These start with
+        low plausibility, so the planner still tries the LLM's own ideas first."""
+        metric_tables = {c.split(".")[0] for c in metric_cols}
+        reachable = set(metric_tables)
+        for t in cat.tables:
+            if t not in reachable and cat.join_keys(metric_tables | {t}):
+                reachable.add(t)
+        covered = {r for h in hyps.values() for r in h["resources"]} | set(metric_cols)
+        per_table: dict[str, list[str]] = {}
+        for t in sorted(reachable, key=lambda t: (t not in metric_tables, t)):
+            for c, meta in cat.tables[t].columns.items():
+                ref = f"{t}.{c}"
+                typ = str(meta.get("type", "")).upper()
+                if ref in covered or cat.sensitivity(ref) not in ("public", "internal") or _is_period(ref, typ):
+                    continue
+                if not any(k in typ for k in ("TEXT", "CHAR", "STRING", "VARCHAR")) or any(k in c for k in _NOT_A_DIMENSION):
+                    continue
+                per_table.setdefault(t, []).append(ref)
+        # Round-robin across tables, so a wide fact table cannot use up the sweep before a joined table is seen.
+        lists = list(per_table.values())
+        candidates = [lst[i] for i in range(max(map(len, lists), default=0)) for lst in lists if i < len(lst)]
+        proposals = [ProposedHypothesis(
+            statement=f"The change is concentrated in one value of {ref.split('.')[1].replace('_', ' ')} ({ref.split('.')[0]})",
+            driver=ref.split(".")[1], kind="decomposition", resources=[ref], plausibility=0.3, info_gain=0.5)
+            for ref in candidates[:SWEEP_MAX]]
+        before = set(hyps)
+        hyps, events = add_hypotheses(hyps, proposals, None, metric_cols)
+        for hid in set(hyps) - before:
+            hyps[hid]["sweep"] = True
+        return hyps, events
 
     def hypothesize(state: InvState):
         out = rt.llm.ask(Hypotheses, prompts.SYSTEM,
                          prompts.hypothesize(state["problem"], state["objective"], cat.describe()))
         hyps, events = add_hypotheses({}, out.hypotheses[:8], None, state["objective"]["metric_columns"])
-        return {"hypotheses": hyps, "events": events}
+        hyps, more = dimension_sweep(hyps, state["objective"]["metric_columns"])
+        return {"hypotheses": hyps, "events": events + more}
 
     def write_query(state: InvState):
         h = state["hypotheses"][state["current"]]
@@ -151,9 +222,10 @@ def build_graph(rt: Runtime):
         stats = state.get("stats")
         out = rt.llm.ask(Interpretation, prompts.SYSTEM,
                          prompts.interpret(state["objective"], h, state["sql"], state["result_csv"], stats))
-        if stats:  # decomposition: verdict and explained share come from deterministic code
+        if stats:  # decomposition and drill-downs: verdict and explained share come from deterministic code
             verdict, share = stats["verdict"], stats["explained_share"]
             finding = f"{out.finding} [evidence engine: {stats['reason']}]"
+            h["confidence"] = stats.get("confidence")
         else:      # event lookup: LLM-judged, corroborating only, never counts toward the stop rule
             verdict, share = out.verdict, 0.0
             finding = f"{out.finding} [event evidence, LLM-judged]"
@@ -166,7 +238,10 @@ def build_graph(rt: Runtime):
                  explained_share=share if verdict == "SUPPORTED" else 0.0)
         hyps[h["id"]] = h
         events = [_event("evidence", evidence=ev), _event("hypothesis_status", hypothesis=dict(h))]
-        if out.follow_ups and verdict == "SUPPORTED":
+        if verdict == "SUPPORTED" and stats and stats.get("kind") == "decomposition" and not h.get("auto"):
+            hyps, more = auto_drills(hyps, h, stats, q["sql"], state["objective"])
+            events += more
+        if out.follow_ups and verdict == "SUPPORTED" and h.get("kind") in ("decomposition", "event"):
             hyps, more = add_hypotheses(hyps, out.follow_ups[:2], h["id"], state["objective"]["metric_columns"])
             events += more
         return {"hypotheses": hyps, "evidence": [ev], "events": events}
@@ -246,17 +321,31 @@ def build_graph(rt: Runtime):
         t0 = time.perf_counter()
         d = rt.policy.decide(req, ctx)
         ms = (time.perf_counter() - t0) * 1000
+        approved = False
+        if not d.allow and d.failed_check in ("P4", "P5") and rt.approver:
+            # Step-up: the evidence gate and budgets may be waived by the analyst, never by the agent.
+            ask = {"hypothesis": h["id"], "statement": h["statement"], "check": d.failed_check,
+                   "reason": d.reason, "resources": h["resources"]}
+            events_pre = [_event("approval_requested", **ask)]
+            approved = bool(rt.approver(ask))
+            events_pre.append(_event("approval_decided", hypothesis=h["id"], approved=approved))
+            if approved:
+                d = rt.policy.decide(req, ctx, waive=frozenset({"P4", "P5"}))
+                req = req.model_copy(update={"ttl_s": min(req.ttl_s, 120)})
+        else:
+            events_pre = []
         if not d.allow:
             h.update(status="BLOCKED", blocked_reason=d.failed_check)
             hyps[h["id"]] = h
-            return {"hypotheses": hyps, "cap_id": None, "events": [
+            return {"hypotheses": hyps, "cap_id": None, "events": events_pre + [
                 _event("policy_denied", hypothesis=h["id"], check=d.failed_check, reason=d.reason,
                        resources=h["resources"], latency_ms=ms)]}
         cap = rt.store.mint(h["id"], d.modes, req.op, req.purpose, req.ttl_s)
         h.update(status="TESTING", blocked_reason=None)
         hyps[h["id"]] = h
-        return {"hypotheses": hyps, "cap_id": cap.cap_id, "events": [
+        return {"hypotheses": hyps, "cap_id": cap.cap_id, "events": events_pre + [
             _event("cap_granted", hypothesis=h["id"], cap_id=cap.cap_id, ttl_s=cap.ttl_s, latency_ms=ms,
+                   approved_by_analyst=approved,
                    resources={r: m for r, m in cap.resources.items() if r in h["resources"]} if rt.mode == "C"
                    else {"*": "clear"})]}
 
@@ -273,19 +362,36 @@ def build_graph(rt: Runtime):
             msg = str(e).splitlines()[0][:300]
             return {"attempts": attempts, "sql_error": f"SQL ERROR: {msg}", "result_csv": None,
                     "events": [_event("sql_error", hypothesis=state["current"], error=msg)]}
-        stats = None
-        if state["hypotheses"][state["current"]].get("kind", "decomposition") == "decomposition":
+        stats, shape_error = None, None
+        h = state["hypotheses"][state["current"]]
+        kind = h.get("kind", "decomposition")
+        if kind == "decomposition":
             norm, shape_error = evidence.normalise(df)
-            if shape_error:
-                return {"attempts": attempts, "sql_error": f"RESULT SHAPE: {shape_error}", "result_csv": None,
-                        "events": [_event("sql_error", hypothesis=state["current"], error=shape_error)]}
-            stats = evidence.score(norm)
-            df = norm
+            if not shape_error:
+                stats, df = evidence.score(norm), norm
+                shape_error = evidence.totals_disagree(stats, rt.totals)
+                if not shape_error:
+                    rt.totals.append((stats["total_baseline"], stats["total_incident"]))
+        elif kind == "price_volume":
+            stats, shape_error = evidence.price_volume(df, h["focus"])
+        elif kind == "timeline":
+            stats, shape_error = evidence.onset(df, h["focus"])
+        if shape_error:
+            return {"attempts": attempts, "sql_error": f"RESULT SHAPE: {shape_error}", "result_csv": None,
+                    "events": [_event("sql_error", hypothesis=state["current"], error=shape_error)]}
+        # Injection firewall: instruction-like text in the rows is masked before any LLM node sees it.
+        df, hits = firewall.scan(df)
+        events = []
+        if hits:
+            rt.firewall_hits += [dict(x, hypothesis=state["current"]) for x in hits]
+            events.append(_event("injection_blocked", hypothesis=state["current"], count=len(hits),
+                                 columns=sorted({x["column"] for x in hits}), sample=hits[0]["snippet"]))
         csv = df.head(60).to_csv(index=False)
         q = {"sql": rec.rewritten_sql, "columns_used": rec.columns_used, "rows": rec.rows}
         return {"attempts": attempts, "sql_error": None, "result_csv": csv, "last_query": q, "stats": stats,
-                "events": [_event("query_ok", hypothesis=state["current"], columns=rec.columns_used,
-                                  rows=rec.rows, latency_ms=rec.latency_ms, preview=df.head(8).to_dict("records"))]}
+                "events": events + [_event("query_ok", hypothesis=state["current"], columns=rec.columns_used,
+                                           rows=rec.rows, latency_ms=rec.latency_ms,
+                                           preview=df.head(8).to_dict("records"))]}
 
     def give_up(state: InvState):
         hyps = dict(state["hypotheses"])
@@ -354,6 +460,7 @@ def exposure(rt: Runtime) -> dict[str, Any]:
         "queries_denied": sum(q.verdict == "denied" for q in rt.gateway.log),
         "gateway_p50_ms": round(sorted(lat)[len(lat) // 2], 2) if lat else None,
         "capabilities_issued": len(rt.store.caps),
+        "injections_blocked": len(rt.firewall_hits),
     }
 
 

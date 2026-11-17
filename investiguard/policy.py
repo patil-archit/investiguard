@@ -12,6 +12,7 @@ from . import config
 from .catalog import Catalog
 
 Op = Literal["READ_ROWS", "READ_AGGREGATE"]
+WAIVABLE = frozenset({"P4", "P5"})
 Mode = Literal["clear", "aggregate_only"]
 
 
@@ -52,7 +53,7 @@ class AllowAllPolicy:
     def __init__(self, catalog: Catalog):
         self.catalog = catalog
 
-    def decide(self, req, ctx):
+    def decide(self, req, ctx, waive=frozenset()):
         return PolicyDecision(allow=True, reason="unrestricted baseline",
                               modes={r: "clear" for r in self.catalog.all_columns()})
 
@@ -63,7 +64,12 @@ class InvestiGuardPolicy:
     def __init__(self, catalog: Catalog):
         self.catalog = catalog
 
-    def decide(self, req: CapabilityRequest, ctx: PolicyContext) -> PolicyDecision:
+    def decide(self, req: CapabilityRequest, ctx: PolicyContext,
+               waive: frozenset[str] = frozenset()) -> PolicyDecision:
+        """`waive` is an analyst's explicit step-up approval. Only the evidence gate (P4) and the budgets
+        (P5) can be waived; P1-P3 (operation, sensitivity ceiling, declaration) never can."""
+        waive = frozenset(waive) & WAIVABLE
+
         def deny(check, reason):
             return PolicyDecision(allow=False, failed_check=check, reason=reason)
 
@@ -90,7 +96,7 @@ class InvestiGuardPolicy:
             return deny("P3", f"resources not declared by hypothesis: {creep}")
 
         # P4 evidence gate
-        for table in sorted({r.split(".")[0] for r in req.resources}) if ctx.evidence_gate else []:
+        for table in sorted({r.split(".")[0] for r in req.resources}) if ctx.evidence_gate and "P4" not in waive else []:
             need = self.catalog.tables[table].requires_finding
             if need is None:
                 continue
@@ -102,10 +108,13 @@ class InvestiGuardPolicy:
         # P5 budgets
         if req.ttl_s > config.CAP_TTL_MAX_S:
             return deny("P5", f"ttl {req.ttl_s}s exceeds max {config.CAP_TTL_MAX_S}s")
+        if "P5" in waive:
+            return PolicyDecision(allow=True, reason=f"P1-P3 passed; {', '.join(sorted(waive))} waived by analyst", modes=modes)
         if ctx.active_caps >= config.K_MAX_ACTIVE_CAPS:
             return deny("P5", f"{ctx.active_caps} capabilities already active (k_max={config.K_MAX_ACTIVE_CAPS})")
         sensitive = {r for r, m in modes.items() if m != "clear"}
         if len(ctx.sensitive_columns_granted | sensitive) > config.SENSITIVE_COLUMN_BUDGET:
             return deny("P5", "cumulative sensitive-column budget exceeded")
 
-        return PolicyDecision(allow=True, reason="P1-P5 passed", modes=modes)
+        return PolicyDecision(allow=True, reason="P1-P5 passed" if not waive else "P1-P3, P5 passed; P4 waived by analyst",
+                              modes=modes)

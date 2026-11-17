@@ -8,3 +8,5 @@ frontend/dist/
 .streamlit/secrets.toml
 data/inventory_movements.csv
 .DS_Store
+data/bench/
+data/runs/

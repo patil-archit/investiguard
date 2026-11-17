@@ -1,8 +1,10 @@
 import clsx from 'clsx'
-import { Bot, ChevronRight, FileSearch, Fingerprint, Info, ScrollText, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { ChevronRight, FileSearch, Fingerprint, Info, ScrollText, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { BotMark as Bot } from '../components/brand'
 import { useState } from 'react'
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EvidenceNode, Investigation } from '../api'
+import { PrivilegeChart, ReceiptCard } from '../components/Insight'
 import { CHART, Card, Chip, CodeBlock, SectionTitle, Stat, StatusBadge, pct } from '../components/ui'
 
 const compact = (n: number) => Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
@@ -52,6 +54,26 @@ export default function ReportView({ inv }: { inv: Investigation }) {
         <Stat label="Capabilities" value={e.capabilities_issued} hint={`gateway p50 ${e.gateway_p50_ms ?? '–'} ms`} />
         <Stat label="Time" value={`${inv.seconds ?? '–'}s`} hint={direct ? 'Direct AI run' : 'InvestiGuard run'} />
       </div>
+
+      {/* privilege over time */}
+      {res.privilege && res.privilege.curve.length > 2 && (
+        <section>
+          <SectionTitle icon={<ShieldCheck className="h-4 w-4" />} title="Privilege over time"
+            sub="how many columns were open to the agent at each moment of the run" />
+          <Card className="grid gap-6 p-5 lg:grid-cols-[1fr_260px]">
+            <PrivilegeChart series={[{ name: direct ? 'Direct AI' : 'InvestiGuard', privilege: res.privilege, color: direct ? '#F45016' : '#8B231A' }]} />
+            <dl className="grid content-center gap-4">
+              <div><dt className="eyebrow">Standing privilege</dt>
+                <dd className="mt-1 text-[22px] font-semibold tabular-nums text-fg">{res.privilege.column_seconds.toFixed(0)} <span className="text-sm font-normal text-muted">column·seconds</span></dd>
+                <dd className="text-xs text-subtle">columns open × time they stayed open</dd></div>
+              <div><dt className="eyebrow">Peak</dt>
+                <dd className="mt-1 text-[22px] font-semibold tabular-nums text-fg">{res.privilege.peak_columns} <span className="text-sm font-normal text-muted">of {e.columns_total} columns</span></dd></div>
+              {!direct && <div><dt className="eyebrow">Injection firewall</dt>
+                <dd className={clsx('mt-1 text-[22px] font-semibold tabular-nums', e.injections_blocked ? 'text-bad' : 'text-fg')}>{e.injections_blocked ?? 0} <span className="text-sm font-normal text-muted">cells masked</span></dd></div>}
+            </dl>
+          </Card>
+        </section>
+      )}
 
       {/* technical report */}
       <section>
@@ -129,6 +151,8 @@ export default function ReportView({ inv }: { inv: Investigation }) {
           </table>
         </Card>
       </section>
+
+      {res.receipt && <ReceiptCard runId={inv.id} receipt={res.receipt} />}
     </div>
   )
 }
@@ -144,12 +168,45 @@ function EvidenceCard({ ev, statement }: { ev: EvidenceNode; statement?: string 
           <span className="font-mono text-xs text-subtle">{ev.hypothesis}</span>
           <StatusBadge status={ev.verdict} />
         </div>
-        {s && <div className="text-xs text-muted">
-          share <b className="font-semibold tabular-nums text-fg">{pct(s.explained_share)}</b>{s.lift != null && <> · lift <b className="font-semibold tabular-nums text-fg">{s.lift}×</b></>}</div>}
+        {s && (s.kind ?? 'decomposition') === 'decomposition' && <div className="text-xs text-muted">
+          share <b className="font-semibold tabular-nums text-fg">{pct(s.explained_share)}</b>{s.lift != null && <> · lift <b className="font-semibold tabular-nums text-fg">{s.lift}×</b></>}
+          {s.significance_z != null && <> · z <b className="font-semibold tabular-nums text-fg">{s.significance_z}</b></>}
+          {!!s.confidence && <> · confidence <b className="font-semibold tabular-nums text-fg">{pct(s.confidence)}</b></>}</div>}
+        {s?.kind === 'price_volume' && <Chip>price vs volume</Chip>}
+        {s?.kind === 'timeline' && <Chip>timing</Chip>}
       </div>
       {statement && <p className="mt-2.5 text-[13.5px] font-medium text-fg">{statement}</p>}
       <p className="mt-1 text-[12.5px] leading-relaxed text-muted">{ev.finding}</p>
-      {s && s.top_movers.length > 0 && (
+      {s?.kind === 'price_volume' && (
+        <div className="mt-4 space-y-2">
+          {([['Quantity effect', s.volume_share!, s.qty_change_pct!], ['Price effect', s.price_share!, s.price_change_pct!]] as const).map(([name, share, change]) => (
+            <div key={name} className="flex items-center gap-3">
+              <span className="w-28 text-xs text-fg-2">{name}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-sm bg-sunken">
+                <div className="h-full rounded-sm bg-accent" style={{ width: `${Math.min(100, Math.max(0, share * 100))}%` }} />
+              </div>
+              <span className="w-32 text-right font-mono text-xs tabular-nums text-fg-2">{pct(share)} · {change > 0 ? '+' : ''}{pct(change)}</span>
+            </div>))}
+          <p className="text-[11.5px] text-subtle">Share of this segment's change, and how much quantity and price per unit moved.</p>
+        </div>
+      )}
+      {s?.kind === 'timeline' && s.series && (
+        <div className="mt-4 h-44">
+          <ResponsiveContainer>
+            <LineChart data={s.series} margin={{ left: -10, right: 8, top: 6, bottom: 0 }}>
+              <CartesianGrid stroke={CHART.grid} vertical={false} />
+              <XAxis dataKey="period" tick={{ ...CHART.axis, fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={16} />
+              <YAxis tickFormatter={compact} tick={{ ...CHART.axis, fontSize: 10 }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v) => compact(Number(v))} contentStyle={CHART.tooltip} />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#776C63' }} iconType="plainline" iconSize={12} />
+              <ReferenceLine x={s.onset_period} stroke="#D32929" strokeDasharray="4 3" label={{ value: 'onset', fontSize: 10, fill: '#D32929', position: 'insideTopRight' }} />
+              <Line type="monotone" dataKey="rest" name="Everything else" stroke={CHART.baseline} strokeWidth={1.6} dot={false} />
+              <Line type="monotone" dataKey="segment" name={s.top_segment} stroke={CHART.series} strokeWidth={2} dot={{ r: 2 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      {s && (s.kind ?? 'decomposition') === 'decomposition' && s.top_movers.length > 0 && (
         <div className="mt-4 h-44">
           <ResponsiveContainer>
             <BarChart data={s.top_movers.map(m => ({ ...m, segment: m.segment.length > 18 ? m.segment.slice(0, 17) + '…' : m.segment }))} margin={{ left: -10, right: 4, top: 4, bottom: 0 }} barGap={2}>
@@ -157,7 +214,7 @@ function EvidenceCard({ ev, statement }: { ev: EvidenceNode; statement?: string 
               <XAxis dataKey="segment" tick={{ ...CHART.axis, fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
               <YAxis tickFormatter={compact} tick={{ ...CHART.axis, fontSize: 10 }} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v) => compact(Number(v))} contentStyle={CHART.tooltip} cursor={CHART.cursor} />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#6b6862' }} iconType="square" iconSize={8} />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#776C63' }} iconType="square" iconSize={8} />
               <Bar dataKey="baseline" name="Baseline" fill={CHART.baseline} radius={[2, 2, 0, 0]} />
               <Bar dataKey="incident" name="Incident" fill={CHART.series} radius={[2, 2, 0, 0]} />
             </BarChart>

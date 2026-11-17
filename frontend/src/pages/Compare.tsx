@@ -1,7 +1,9 @@
 import clsx from 'clsx'
-import { Bot, GitCompareArrows, RefreshCw, ShieldCheck } from 'lucide-react'
+import { GitCompareArrows, RefreshCw, ShieldCheck } from 'lucide-react'
+import { BotMark as Bot } from '../components/brand'
 import { useCallback, useEffect, useState } from 'react'
 import { api, type CompareRow } from '../api'
+import { PrivilegeChart } from '../components/Insight'
 import { Button, Card, Chip, Empty, PageHeader, SectionTitle, pct } from '../components/ui'
 import { useStore } from '../store'
 
@@ -41,6 +43,8 @@ export default function Compare() {
                   <Bars label="Sensitive columns exposed raw" a={A.exposure.sensitive_exposed_raw.length} c={C.exposure.sensitive_exposed_raw.length} max={Math.max(1, A.exposure.sensitive_exposed_raw.length, C.exposure.sensitive_exposed_raw.length)} />
                   <Bars label="Queries denied" a={A.exposure.queries_denied} c={C.exposure.queries_denied} max={Math.max(1, A.exposure.queries_denied, C.exposure.queries_denied)} />
                   <Bars label="Seconds" a={A.seconds} c={C.seconds} max={Math.max(A.seconds, C.seconds)} />
+                  {C.privilege && A.privilege && <Bars label="Standing privilege (column·seconds)" a={Math.round(A.privilege.column_seconds)} c={Math.round(C.privilege.column_seconds)}
+                    max={Math.max(1, A.privilege.column_seconds, C.privilege.column_seconds)} />}
                 </div>
                 {A.exposure.columns_touched.length > 0 && (
                   <p className="mt-6 border-t border-line pt-4 text-sm text-fg-2">
@@ -49,6 +53,17 @@ export default function Compare() {
                       : <>Direct AI read <b className="font-semibold text-bad">{A.exposure.sensitive_exposed_raw.length}</b> sensitive column(s) raw; InvestiGuard read <b className="font-semibold text-good">{C.exposure.sensitive_exposed_raw.length}</b>. </>}
                     InvestiGuard's verdicts were computed by code; Direct AI judged its own findings.
                   </p>)}
+              </Card>
+            </section>
+          )}
+          {C?.privilege && A?.privilege && (
+            <section>
+              <SectionTitle icon={<ShieldCheck className="h-4 w-4" />} title="Privilege over time"
+                sub="columns open to the agent at each moment; the area under each line is its standing privilege" />
+              <Card className="p-5">
+                <PrivilegeChart height={240} series={[
+                  { name: 'Direct AI', privilege: A.privilege, color: '#A0948A' },
+                  { name: 'InvestiGuard', privilege: C.privilege, color: '#8B231A' }]} />
               </Card>
             </section>
           )}

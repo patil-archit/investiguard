@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArrowUp, ChevronRight, KeyRound, MessageSquareText, ShieldX, Timer } from 'lucide-react'
+import { ArrowUp, Box, ChevronRight, KeyRound, MessageSquareText, ShieldX, Timer } from 'lucide-react'
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api, type AskAnswer } from '../api'
@@ -67,6 +67,7 @@ export default function Ask() {
 function AnswerCard({ a }: { a: AskAnswer }) {
   const [showSql, setShowSql] = useState(false)
   const [showTry, setShowTry] = useState(false)
+  const [showCode, setShowCode] = useState(false)
   const chartable = a.chart !== 'none' && a.columns.includes(a.x) && a.columns.includes(a.y) && a.rows.length > 1
   const data = chartable ? a.rows.slice(0, 60).map(r => ({ x: String(r[a.x]), y: Number(r[a.y]) })) : []
   return (
@@ -79,6 +80,10 @@ function AnswerCard({ a }: { a: AskAnswer }) {
             {Object.entries(a.granted).map(([c, m]) => <Chip key={c} mono tone={m === 'aggregate_only' ? 'warn' : 'default'}>{c.split('.').pop()}{m === 'aggregate_only' ? ' · count-only' : ''}</Chip>)}
           </span>
           <span>revoked after answering</span>
+          {a.analysis && <span className={a.analysis.ok ? 'flex items-center gap-1 text-accent' : 'flex items-center gap-1 text-warn'}>
+            <Box className="h-3 w-3" />{a.analysis.ok ? `Python ran in sandbox (${a.analysis.seconds}s, no network)` : 'Python step skipped'}</span>}
+          {!!a.injections_blocked?.length && <span className="flex items-center gap-1 text-bad">
+            <ShieldX className="h-3 w-3" />{a.injections_blocked.length} instruction-like cell(s) masked</span>}
         </div>
       </div>
       <div className="p-5">
@@ -131,10 +136,17 @@ function AnswerCard({ a }: { a: AskAnswer }) {
         <div className="mt-4 flex flex-wrap gap-4">
           {a.sql && <button onClick={() => setShowSql(o => !o)} className="flex items-center gap-1 text-xs text-muted hover:text-fg">
             <ChevronRight className={clsx('h-3.5 w-3.5 transition', showSql && 'rotate-90')} /> Generated SQL</button>}
+          {a.analysis && <button onClick={() => setShowCode(o => !o)} className="flex items-center gap-1 text-xs text-muted hover:text-fg">
+            <ChevronRight className={clsx('h-3.5 w-3.5 transition', showCode && 'rotate-90')} /> Sandboxed Python</button>}
           {a.attempts.length > 1 && <button onClick={() => setShowTry(o => !o)} className="flex items-center gap-1 text-xs text-warn hover:text-fg">
             <ChevronRight className={clsx('h-3.5 w-3.5 transition', showTry && 'rotate-90')} /> {a.attempts.length - 1} attempt(s) blocked by policy/gateway</button>}
         </div>
         {showSql && <div className="mt-3"><CodeBlock code={a.sql} /></div>}
+        {showCode && a.analysis && <div className="mt-3 space-y-2">
+          <CodeBlock code={a.analysis.code} />
+          <p className={clsx('text-xs', a.analysis.ok ? 'text-muted' : 'text-warn')}>
+            {a.analysis.ok ? `Ran on the query result only, isolated: ${a.analysis.isolation}.` : `Not used: ${a.analysis.error}`}</p>
+        </div>}
         {showTry && <div className="mt-3 space-y-2">{a.attempts.map(t => (
           <div key={t.attempt} className="rounded-md border border-line p-3">
             <div className={clsx('mb-2 text-xs font-medium', t.result.startsWith('ok') ? 'text-good' : 'text-bad')}>#{t.attempt} · {t.result}</div>

@@ -26,6 +26,12 @@ SQL = {
 }
 
 
+TIMELINE_SQL = ("SELECT strftime('%Y-%W', payment_date) AS period, "
+                "SUM(CASE WHEN status = 'failed' THEN amount ELSE 0 END) AS segment_value, "
+                "SUM(amount) AS total_value FROM payments WHERE payment_date >= '2026-08-01' "
+                "GROUP BY 1 ORDER BY 1")
+
+
 class ScriptedLLM:
     def __init__(self):
         self.calls = []
@@ -58,6 +64,8 @@ class ScriptedLLM:
                                    resources=["customers.email", "made_up.column"], plausibility=0.1, info_gain=0.1),
             ])
         if schema is QueryPlan:
+            if "period        (text)" in user:   # code-generated timing drill-down on the supported segment
+                return QueryPlan(sql=TIMELINE_SQL, rationale="scripted timeline")
             return QueryPlan(sql=SQL[self._driver(user)], rationale="scripted")
         if schema is Interpretation:
             d = self._driver(user)

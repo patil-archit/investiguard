@@ -1,47 +1,12 @@
 import clsx from 'clsx'
-import { Boxes, BrainCircuit, Database, GitBranch, Layers, MessageSquareText, Route, ShieldCheck, ShieldHalf, Workflow } from 'lucide-react'
+import { Boxes, Database, GitBranch, Layers, MessageSquareText, Route, ShieldCheck, ShieldHalf, Workflow } from 'lucide-react'
+import { BotMark as BrainCircuit } from '../components/brand'
 import { useEffect, useState, type ReactNode } from 'react'
 import { api, type Architecture } from '../api'
+import { C4Diagram, C4Key, C4_DIAGRAMS } from '../components/C4'
 import { Mermaid } from '../components/Mermaid'
 import { Card, SectionTitle } from '../components/ui'
 import { useStore } from '../store'
-
-const ARCH = `flowchart TB
-  subgraph P["Presentation plane"]
-    direction LR
-    U(["Analyst"]):::ui --> S["React studio<br/><small>Investigate · Ask · Compare · Data</small>"]:::ui
-  end
-  subgraph R["Reasoning plane — UNTRUSTED"]
-    direction LR
-    AG["LangGraph agent<br/><small>understand · hypothesize · write_query · interpret · report</small>"]:::llm
-    LLM[["LLM<br/><small>structured JSON outputs</small>"]]:::llm
-    AS["Ask-your-data<br/><small>NL → SQL → answer</small>"]:::llm
-    AG <-.-> LLM <-.-> AS
-  end
-  subgraph C["Control plane — TRUSTED code, no LLM"]
-    direction LR
-    PL["Planner<br/><small>cheapest privilege first</small>"]:::code --> PO["Policy engine<br/><small>P1–P5</small>"]:::code -- ALLOW --> CA["Capability store<br/><small>signed · TTL · revoke</small>"]:::code
-    EV["Evidence engine<br/><small>share · lift · relabel</small>"]:::code
-    AU["Audit & provenance"]:::code
-  end
-  subgraph D["Data plane"]
-    direction LR
-    CT["Catalogue<br/><small>sensitivity · gates</small>"]:::data
-    GW["SQL gateway<br/><small>AST column check · COUNT-only · row limit</small>"]:::code -- checked SELECT --> DB[("Read-only database")]:::data
-  end
-  S --> AG & AS
-  AG -- hypotheses --> PL
-  PO -. reads .-> CT
-  AG -- "SQL + token" --> GW
-  AS -- "SQL + token" --> GW
-  GW -. verify .-> CA
-  GW -- rows --> EV -- verdict --> AG
-  EV --> AU
-  AU -. live events .-> S
-  classDef llm fill:#fdf3e6,stroke:#c48a3f,color:#5a3a12
-  classDef code fill:#eaf4ee,stroke:#5c9a74,color:#173d27
-  classDef data fill:#e7f0f3,stroke:#4f8ea3,color:#0e3a48
-  classDef ui fill:#f3f2ef,stroke:#b5b1a8,color:#1b1a18`
 
 const ASK = `flowchart LR
   Q(["Question"]):::ui --> W["LLM writes SQL"]:::llm --> P["Gateway parses SQL<br/><small>exact columns used</small>"]:::code
@@ -52,16 +17,16 @@ const ASK = `flowchart LR
   X -. "error → retry" .-> W
   classDef llm fill:#fdf3e6,stroke:#c48a3f,color:#5a3a12
   classDef code fill:#eaf4ee,stroke:#5c9a74,color:#173d27
-  classDef ui fill:#f3f2ef,stroke:#b5b1a8,color:#1b1a18`
+  classDef ui fill:#EFEAE6,stroke:#B9ADA4,color:#2D2A26`
 
 const PLANES = [
-  { icon: <Layers className="h-4 w-4" />, swatch: 'bg-[#f3f2ef] border-[#b5b1a8]', title: 'Presentation',
+  { icon: <Layers className="h-4 w-4" />, swatch: 'bg-[#EFEAE6] border-[#B9ADA4]', title: 'Presentation',
     text: 'Starts investigations and questions, and streams every grant, denial, revocation and verdict live over server-sent events.' },
   { icon: <BrainCircuit className="h-4 w-4" />, swatch: 'bg-[#fdf3e6] border-[#c48a3f]', title: 'Reasoning · untrusted',
     text: 'LLM nodes can only request capabilities and submit SQL. Everything they produce, including text read from the data, is treated as untrusted input.' },
   { icon: <ShieldCheck className="h-4 w-4" />, swatch: 'bg-[#eaf4ee] border-[#5c9a74]', title: 'Control · trusted',
     text: 'Planner, policy engine, capability store and evidence engine are plain, testable code. No LLM takes part in any decision.' },
-  { icon: <Database className="h-4 w-4" />, swatch: 'bg-[#e7f0f3] border-[#4f8ea3]', title: 'Data',
+  { icon: <Database className="h-4 w-4" />, swatch: 'bg-[#F3DDD6] border-[#C2675A]', title: 'Data',
     text: 'The SQL gateway is the only path to the data. It resolves every column through the syntax tree and fails closed. The database itself is opened read-only.' },
 ]
 
@@ -100,12 +65,16 @@ export default function HowItWorks() {
         <div className="mt-5 flex flex-wrap gap-5 text-xs text-muted">
           <Legend cls="bg-[#fdf3e6] border-[#c48a3f]" label="Untrusted (LLM output)" />
           <Legend cls="bg-[#eaf4ee] border-[#5c9a74]" label="Trusted deterministic code" />
-          <Legend cls="bg-[#e7f0f3] border-[#4f8ea3]" label="Data" />
+          <Legend cls="bg-[#F3DDD6] border-[#C2675A]" label="Data" />
         </div>
       </header>
 
-      <Section icon={<Boxes className="h-4 w-4" />} title="1 · System architecture" sub="four planes separated by an explicit trust boundary">
-        <Card className="p-6"><Mermaid chart={ARCH} /></Card>
+      <Section icon={<Boxes className="h-4 w-4" />} title="1 · System architecture"
+        sub="C4 model: context → containers → components. Arrows point from caller to callee and read as “purpose [technology]”.">
+        <Card className="divide-y divide-line">
+          <div className="px-6 py-4"><C4Key /></div>
+          {C4_DIAGRAMS.map(d => <div key={d.level} className="p-6"><C4Diagram d={d} /></div>)}
+        </Card>
         <div className="mt-4 grid gap-px overflow-hidden rounded-lg border border-line bg-line md:grid-cols-2 xl:grid-cols-4">
           {PLANES.map(p => (
             <div key={p.title} className="bg-surface p-5">

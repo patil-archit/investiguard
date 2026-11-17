@@ -58,24 +58,54 @@ From the command line:
 - **SQL gateway** (`investiguard/gateway.py`): resolves every column through the sqlglot AST (including
   `*`, aliases, CTEs, sub-queries and UNIONs), enforces COUNT-only columns, adds a row limit, runs
   queries read-only, and fails closed.
-- **Evidence engine** (`investiguard/agent/evidence.py`): explained share, lift, a specificity check and
-  relabelling detection. It decides the verdicts, and the key numbers in the plain-language summary
-  come from it.
-- **Direct AI baseline** (`investiguard/agent/direct.py`): the comparison mode. One AI analyst sees every
-  column, runs free-form queries and states the reason itself, with no hypotheses, no policy and no evidence
-  engine. The "InvestiGuard vs AI" page puts the two runs side by side.
-- **Ask your data** (`investiguard/ask.py`): NL → SQL, under the same trust boundary.
-- **Agent Studio** (`app.py`, `investiguard/ui/`): the Investigate, Ask, InvestiGuard vs Direct AI, Data and How it works
-  tabs, with a custom theme (`.streamlit/config.toml`) and stylesheet (`investiguard/ui/styles.py`).
-- **Tests:** 41 cases covering threats T2, T3, T5 and T6, the agent loop, the evidence engine, ingest
-  of every format, and profiling.
+- **Evidence engine** (`investiguard/agent/evidence.py`): decides every verdict in code.
+  - *Decomposition:* explained share, lift, a specificity check, relabelling detection, a robust
+    significance z-score and a confidence figure.
+  - *Price vs volume:* on each supported segment, splits the change into a quantity effect and a
+    price-per-unit effect that sum exactly to the change.
+  - *Onset timing:* finds the period where the segment's level shifted, and whether the rest of the
+    metric moved at the same time.
 
-Not built yet:
-- Docker sandbox for LLM-written Python (T1/T4).
-- Significance and timing terms (S, T) in the evidence score.
-- Price/volume/mix decomposition.
-- Evaluation harness.
-- Redis capability store.
+  The two drill-downs are added by code, not proposed by the LLM, and never count toward the stop rule.
+- **Dimension sweep:** after the LLM proposes hypotheses, code adds a cheap, low-priority test for each
+  untested non-sensitive categorical column of the metric's table and of tables that join to it (taking
+  tables in turn), so a whole class of causes cannot be skipped because the LLM did not think of it.
+- **Result-consistency guards:** segments may not add up to more than the ALL row, every query's ALL row
+  must match the overall metric that earlier queries agree on, and a timing series with empty periods is
+  sent back for a fix. Each is returned to the query writer as an error to correct.
+- **Injection firewall** (`investiguard/firewall.py`): instruction-like text in query results is masked
+  before any LLM node sees it, and each hit is logged.
+- **Step-up approval:** with "Ask me before gated access" on, an evidence-gate (P4) or budget (P5) denial
+  pauses the run until you approve or deny it. An approval opens only those columns, once, for 2 minutes.
+  P1–P3 can never be waived.
+- **Access ledger** (`investiguard/ledger.py`): every event of a run is hash-chained and sealed into a
+  signed receipt. The report can re-verify it, and can show that a single edited entry breaks the seal.
+- **Privilege over time:** from the grant and revoke events, the report plots how many columns were open
+  at each moment and reports the area under that curve as column·seconds.
+- **Code sandbox** (`investiguard/sandbox.py`, `sandbox/`): LLM-written Python runs only inside a Docker
+  container with no network, a read-only filesystem, a non-root user, all capabilities dropped, and
+  time, memory and process limits. It receives only rows a capability already released. Ask-your-data
+  uses it for calculations SQL does poorly. Without Docker the step is skipped; code never runs
+  unsandboxed.
+- **Direct AI baseline** (`investiguard/agent/direct.py`): the comparison mode. One AI analyst sees every
+  column, runs free-form queries and states the reason itself, with no hypotheses, no policy, no firewall
+  and no evidence engine. The "InvestiGuard vs AI" page puts the two runs side by side.
+- **Ask your data** (`investiguard/ask.py`): NL → SQL, under the same trust boundary.
+- **Benchmark** (`investiguard/bench/`): six synthetic datasets, each with one planted root cause
+  (a region, a price cut, a volume drop, a relabelling decoy, a planted prompt injection, a cause next
+  to personal data). Both modes are run and scored by code against the planted answer.
+  ```bash
+  .venv/bin/python -m investiguard.bench            # writes benchmarks/latest.json, shown on the Benchmark page
+  ```
+- **Agent Studio** (`app.py`, `investiguard/ui/`): the Streamlit fallback, with the Investigate, Ask,
+  InvestiGuard vs Direct AI, Data and How it works tabs.
+- **Tests:** 65 cases covering the gateway, policy and token threats, the agent loop, the evidence
+  engine, its drill-downs and result-consistency guards, the firewall, the ledger, step-up approval, sandbox escape attempts
+  (skipped when Docker is not running), ingest of every format, profiling and the benchmark scoring.
+
+Not built:
+- Redis capability store (the store is in memory; finished runs are saved under `data/runs/`).
+- Mix effect in the price/volume split (it splits one segment, not a basket of products).
 
 ## Bundled datasets
 - **inventory**: 349k SAP stores movements from FY2020-25. The known answer for the default problem:

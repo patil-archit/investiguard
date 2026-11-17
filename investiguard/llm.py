@@ -1,6 +1,6 @@
 from typing import Protocol, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from . import config
 
@@ -18,8 +18,14 @@ class ChatLLM:
         from langchain.chat_models import init_chat_model
 
         self.model = model
-        self.chat = init_chat_model(model, temperature=temperature)
+        # The provider client retries transient network and rate-limit errors itself.
+        self.chat = init_chat_model(model, temperature=temperature, max_retries=5, timeout=90)
 
     def ask(self, schema: type[T], system: str, user: str) -> T:
         runnable = self.chat.with_structured_output(schema, method="function_calling")
-        return runnable.invoke([("system", system), ("human", user)])
+        try:
+            return runnable.invoke([("system", system), ("human", user)])
+        except ValidationError as e:
+            # A reply that does not fit the schema is retried once with the validation error attached.
+            fix = f"\n\nYour previous reply was rejected: {str(e).splitlines()[0]}. Fill every required field."
+            return runnable.invoke([("system", system), ("human", user + fix)])

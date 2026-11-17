@@ -19,7 +19,8 @@ from sqlalchemy.engine import make_url
 
 from investiguard import ask as ask_mod
 from investiguard import catalog as catalog_mod
-from investiguard import config, db, explain, profile
+from investiguard import config, db, explain, ledger, profile, sandbox
+from investiguard.bench import runner as bench_runner
 from investiguard.agent.direct import run_direct
 from investiguard.agent.graph import Runtime, build_graph, run
 from investiguard.ingest import SUPPORTED, ingest_uploads, slug
@@ -30,6 +31,23 @@ app = FastAPI(title="InvestiGuard API")
 DIST = config.ROOT / "frontend" / "dist"
 RUNS: dict[str, dict] = {}             # investigation id -> run record (in memory)
 LATEST: dict[tuple[str, str], str] = {}  # (dataset, mode) -> latest run id, for the A vs C comparison
+RUNS_DIR = config.ROOT / "data" / "runs"
+APPROVAL_TIMEOUT_S = 180
+BENCH: dict = {"status": "idle", "progress": None, "error": None}
+_PRIVATE = {"events", "pending"}       # run-record keys that are not returned with the record itself
+
+
+def _load_saved_runs() -> None:
+    """Finished runs are kept on disk so reports, receipts and the comparison survive a restart."""
+    saved = sorted(RUNS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime)[-60:] if RUNS_DIR.exists() else []
+    for f in saved:
+        try:
+            rec = json.loads(f.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        RUNS[rec["id"]] = rec
+        if rec.get("status") == "done":
+            LATEST[(rec["dataset"], rec["mode"])] = rec["id"]
 
 
 def _plain(obj):
@@ -196,7 +214,8 @@ def ask(body: AskIn):
         "question": r.question, "answer": r.answer, "sql": r.sql, "denied": r.denied, "seconds": round(r.seconds, 2),
         "columns": [] if r.df is None else [str(c) for c in r.df.columns], "rows": rows,
         "total_rows": 0 if r.df is None else len(r.df), "chart": r.chart, "x": r.x, "y": r.y,
-        "granted": r.columns_granted, "attempts": r.attempts})
+        "granted": r.columns_granted, "attempts": r.attempts, "analysis": r.analysis,
+        "injections_blocked": r.injections_blocked})
 
 
 # ---------------- investigations (background thread + server-sent events) ----------------
@@ -205,6 +224,7 @@ class InvestigateIn(BaseModel):
     problem: str
     mode: str = "C"
     model: str = ""
+    approvals: bool = False   # ask the analyst before an evidence-gate or budget denial is final
 
 
 @app.post("/api/investigations")
@@ -213,25 +233,44 @@ def start_investigation(body: InvestigateIn):
     cat = catalog_mod.load(ds["catalog"])
     rid = uuid.uuid4().hex[:10]
     rec = {"id": rid, "dataset": body.dataset, "mode": body.mode, "problem": body.problem, "status": "running",
-           "events": [], "result": None, "error": None, "started": time.time(), "seconds": None}
+           "events": [], "result": None, "error": None, "started": time.time(), "seconds": None, "pending": {}}
     RUNS[rid] = rec
+
+    def approver(ask: dict) -> bool:
+        """Blocks the run until the analyst answers in the UI (or the wait times out, which means no)."""
+        slot = {"event": threading.Event(), "approved": False}
+        rec["pending"][ask["hypothesis"]] = slot
+        slot["event"].wait(APPROVAL_TIMEOUT_S)
+        rec["pending"].pop(ask["hypothesis"], None)
+        return slot["approved"]
 
     def work():
         try:
             rt = Runtime(catalog=cat, llm=_llm(body.model), mode=body.mode, url=ds["url"],
-                         currency=ds.get("currency", "INR"))
+                         currency=ds.get("currency", "INR"),
+                         approver=approver if body.approvals and body.mode == "C" else None)
             # Mode C: hypothesis-driven InvestiGuard. Mode A: the Direct AI baseline it is compared against.
             runner = run_direct if body.mode == "A" else run
             final = runner(body.problem, rt, lambda ev: rec["events"].append(_plain(ev)))
             rec["result"] = _plain({"report": final["report"], "hypotheses": final.get("hypotheses", {}),
                                     "evidence": final.get("evidence", []), "steps": final.get("steps", []),
                                     "gateway_log": [vars(q) for q in rt.gateway.log]})
+            sensitive = {c for c in cat.all_columns() if cat.sensitivity(c) in ("confidential", "restricted")}
+            rec["result"]["privilege"] = ledger.privilege_timeline(rec["events"], len(cat.all_columns()), sensitive)
+            rec["result"]["firewall"] = _plain(rt.firewall_hits)
+            # Seal the hash chain over every event of the run: the tamper-evident access receipt.
+            rec["result"]["receipt"] = ledger.seal(rid, rec["events"])
             rec["status"] = "done"
             LATEST[(body.dataset, body.mode)] = rid
         except Exception as e:
             rec["error"], rec["status"] = str(e), "error"
         finally:
             rec["seconds"] = round(time.time() - rec["started"], 1)
+            try:
+                RUNS_DIR.mkdir(parents=True, exist_ok=True)
+                (RUNS_DIR / f"{rid}.json").write_text(json.dumps({k: v for k, v in rec.items() if k != "pending"}))
+            except OSError:
+                pass
 
     threading.Thread(target=work, daemon=True).start()
     return {"id": rid}
@@ -242,7 +281,42 @@ def get_investigation(rid: str):
     rec = RUNS.get(rid)
     if not rec:
         raise HTTPException(404, "unknown investigation")
-    return {k: v for k, v in rec.items() if k != "events"} | {"event_count": len(rec["events"])}
+    return {k: v for k, v in rec.items() if k not in _PRIVATE} | {"event_count": len(rec["events"])}
+
+
+class ApprovalIn(BaseModel):
+    hypothesis: str
+    approve: bool
+
+
+@app.post("/api/investigations/{rid}/approvals")
+def decide_approval(rid: str, body: ApprovalIn):
+    slot = (RUNS.get(rid) or {}).get("pending", {}).get(body.hypothesis)
+    if not slot:
+        raise HTTPException(404, "no approval is waiting for that hypothesis")
+    slot["approved"] = body.approve
+    slot["event"].set()
+    return {"ok": True}
+
+
+@app.get("/api/investigations/{rid}/ledger")
+def get_ledger(rid: str, tamper: bool = False):
+    """The hash-chained event log and its receipt, re-verified now. `tamper=true` shows what a single
+    edited entry does to the verification (on a copy; the stored log is untouched)."""
+    rec = RUNS.get(rid)
+    if not rec or not rec.get("result") or not rec["result"].get("receipt"):
+        raise HTTPException(404, "no sealed ledger for that investigation")
+    events = rec["events"]
+    if tamper and events:
+        events = [dict(e) for e in events]
+        victim = next((e for e in events if e["kind"] == "cap_granted"), events[0])
+        victim["resources"] = {"*": "clear"}
+    hashes = ledger.chain(events)
+    return {"receipt": rec["result"]["receipt"], "verification": ledger.verify(events, rec["result"]["receipt"]),
+            "tampered": tamper,
+            "entries": [{"i": i, "t": e["t"], "kind": e["kind"], "hypothesis": e.get("hypothesis") if isinstance(
+                e.get("hypothesis"), str) else (e.get("hypothesis") or {}).get("id"), "hash": h}
+                        for i, (e, h) in enumerate(zip(events, hashes))]}
 
 
 @app.get("/api/investigations/{rid}/events")
@@ -274,9 +348,46 @@ def compare(dataset: str):
         if rid and RUNS[rid]["result"] and not RUNS[rid]["result"]["report"].get("not_investigation"):
             rep = RUNS[rid]["result"]["report"]
             out.append({"mode": mode, "root_cause": rep["root_cause"], "exposure": rep["exposure"],
+                        "privilege": RUNS[rid]["result"].get("privilege"),
                         "verified": not rep.get("unverified", False),
                         "seconds": RUNS[rid]["seconds"], "problem": RUNS[rid]["problem"]})
     return out
+
+
+# ---------------- system status and benchmark ----------------
+@app.get("/api/system")
+def system_status():
+    return {"sandbox": sandbox.status(), "sandbox_image": sandbox.IMAGE}
+
+
+@app.get("/api/benchmark")
+def get_benchmark():
+    return {"state": {k: BENCH[k] for k in ("status", "progress", "error")}, "results": bench_runner.load()}
+
+
+class BenchIn(BaseModel):
+    model: str = ""
+    scenarios: list[str] | None = None
+
+
+@app.post("/api/benchmark/run")
+def run_benchmark(body: BenchIn):
+    if BENCH["status"] == "running":
+        raise HTTPException(409, "a benchmark is already running")
+    if body.model == "scripted-demo":
+        raise HTTPException(400, "the benchmark needs a real model; the scripted demo model only knows the demo dataset")
+    BENCH.update(status="running", progress=None, error=None)
+
+    def work():
+        try:
+            model = body.model or config.LLM_MODEL
+            bench_runner.run_all(_llm(model), model, body.scenarios, progress=lambda p: BENCH.update(progress=p))
+            BENCH.update(status="idle", progress=None)
+        except Exception as e:
+            BENCH.update(status="idle", error=str(e)[:300])
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"ok": True}
 
 
 # ---------------- architecture ----------------
@@ -295,6 +406,8 @@ def architecture(dataset: str):
         "stop": {"share": config.STOP_EXPLAINED_SHARE, "iterations": config.MAX_ITERATIONS},
     }
 
+
+_load_saved_runs()
 
 # ---------------- frontend ----------------
 if (DIST / "assets").exists():
