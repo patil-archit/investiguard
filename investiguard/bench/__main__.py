@@ -4,10 +4,11 @@ from .. import config
 from ..llm import ChatLLM
 from . import runner, scenarios
 
-ap = argparse.ArgumentParser(description="InvestiGuard benchmark: planted root causes, both modes")
+ap = argparse.ArgumentParser(description="InvestiGuard benchmark: planted root causes, three systems and ablations")
 ap.add_argument("--model", default=config.LLM_MODEL)
 ap.add_argument("--scenarios", nargs="*", default=None, choices=[s.name for s in scenarios.SPECS])
-ap.add_argument("--modes", nargs="*", default=["C", "A"], choices=["C", "A"])
+ap.add_argument("--modes", nargs="*", default=["C", "B", "A"], choices=["C", "B", "A", "C-gate", "C-table", "C-order"],
+                help="C InvestiGuard, B static allowlist, A Direct AI; C-gate / C-table / C-order are ablations")
 args = ap.parse_args()
 
 res = runner.run_all(ChatLLM(args.model), args.model, args.scenarios, tuple(args.modes),

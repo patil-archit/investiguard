@@ -14,20 +14,25 @@ import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 from sqlalchemy.engine import make_url
 
 from investiguard import ask as ask_mod
 from investiguard import catalog as catalog_mod
-from investiguard import config, db, explain, ledger, profile, sandbox
+from investiguard import config, db, explain, ledger, profile, quality, sandbox, shopsim, threats
+from server import security
 from investiguard.bench import runner as bench_runner
 from investiguard.agent.direct import run_direct
 from investiguard.agent.graph import Runtime, build_graph, run
-from investiguard.ingest import SUPPORTED, ingest_uploads, slug
+from investiguard.ingest import SUPPORTED, ingest, ingest_report, ingest_uploads, slug
 from investiguard.llm import ChatLLM
 from investiguard.onboard import onboard
 
-app = FastAPI(title="InvestiGuard API")
+app = FastAPI(title="InvestiGuard API", docs_url=None, redoc_url=None, openapi_url=None)
+app.middleware("http")(security.middleware)
+THREAT_LAST: dict = {"results": [], "summary": None, "finished_at": None, "sandbox": None}
 DIST = config.ROOT / "frontend" / "dist"
 RUNS: dict[str, dict] = {}             # investigation id -> run record (in memory)
 LATEST: dict[tuple[str, str], str] = {}  # (dataset, mode) -> latest run id, for the A vs C comparison
@@ -98,7 +103,8 @@ def list_datasets():
     out = []
     for name, ds in config.datasets().items():
         item = {"name": name, "label": ds["label"], "currency": ds.get("currency", "INR"),
-                "problem": ds.get("problem", ""), "suggested_problems": ds.get("suggested_problems") or
+                "problem": ds.get("problem", ""), "incidents": len(ds.get("incidents") or []),
+                "generated": ds.get("generated"), "suggested_problems": ds.get("suggested_problems") or
                 [ds.get("problem", "")], "sample_questions": ds.get("sample_questions", []), "ready": False}
         try:
             u = make_url(ds["url"])
@@ -198,8 +204,8 @@ def connect_dataset(body: ConnectIn):
 
 # ---------------- ask ----------------
 class AskIn(BaseModel):
-    dataset: str
-    question: str
+    dataset: str = Field(max_length=120)
+    question: str = Field(min_length=2, max_length=1000)
     mode: str = "C"
     model: str = ""
 
@@ -208,7 +214,8 @@ class AskIn(BaseModel):
 def ask(body: AskIn):
     ds = _dataset(body.dataset)
     cat = catalog_mod.load(ds["catalog"])
-    r = ask_mod.ask(body.question, cat, _llm(body.model), ds["url"], body.mode, currency=ds.get("currency", "INR"))
+    mode = "A" if body.mode == "A" else "C"   # Ask has no table allowlist, so System B asks like C
+    r = ask_mod.ask(body.question, cat, _llm(body.model), ds["url"], mode, currency=ds.get("currency", "INR"))
     rows = [] if r.df is None else json.loads(r.df.head(500).to_json(orient="records", date_format="iso"))
     return _plain({
         "question": r.question, "answer": r.answer, "sql": r.sql, "denied": r.denied, "seconds": round(r.seconds, 2),
@@ -220,11 +227,12 @@ def ask(body: AskIn):
 
 # ---------------- investigations (background thread + server-sent events) ----------------
 class InvestigateIn(BaseModel):
-    dataset: str
-    problem: str
-    mode: str = "C"
-    model: str = ""
+    dataset: str = Field(max_length=120)
+    problem: str = Field(min_length=3, max_length=2000)
+    mode: Literal["A", "B", "C"] = "C"
+    model: str = Field("", max_length=120)
     approvals: bool = False   # ask the analyst before an evidence-gate or budget denial is final
+    allow_tables: list[str] = Field(default_factory=list, max_length=50)  # System B allowlist
 
 
 @app.post("/api/investigations")
@@ -246,11 +254,13 @@ def start_investigation(body: InvestigateIn):
 
     def work():
         try:
+            allow = [t for t in body.allow_tables if t in cat.tables] or (
+                sorted(cat.tables)[:2] if body.mode == "B" else [])
             rt = Runtime(catalog=cat, llm=_llm(body.model), mode=body.mode, url=ds["url"],
-                         currency=ds.get("currency", "INR"),
+                         currency=ds.get("currency", "INR"), allow_tables=allow,
                          approver=approver if body.approvals and body.mode == "C" else None)
             # Mode C: hypothesis-driven InvestiGuard. Mode A: the Direct AI baseline it is compared against.
-            runner = run_direct if body.mode == "A" else run
+            runner = run_direct if body.mode in ("A", "B") else run
             final = runner(body.problem, rt, lambda ev: rec["events"].append(_plain(ev)))
             rec["result"] = _plain({"report": final["report"], "hypotheses": final.get("hypotheses", {}),
                                     "evidence": final.get("evidence", []), "steps": final.get("steps", []),
@@ -258,6 +268,7 @@ def start_investigation(body: InvestigateIn):
             sensitive = {c for c in cat.all_columns() if cat.sensitivity(c) in ("confidential", "restricted")}
             rec["result"]["privilege"] = ledger.privilege_timeline(rec["events"], len(cat.all_columns()), sensitive)
             rec["result"]["firewall"] = _plain(rt.firewall_hits)
+            rec["result"]["answer_check"] = answer_check(ds, body.problem, final["report"])
             # Seal the hash chain over every event of the run: the tamper-evident access receipt.
             rec["result"]["receipt"] = ledger.seal(rid, rec["events"])
             rec["status"] = "done"
@@ -343,7 +354,7 @@ async def stream_events(rid: str):
 @app.get("/api/compare/{dataset}")
 def compare(dataset: str):
     out = []
-    for mode in ("C", "A"):
+    for mode in ("C", "B", "A"):
         rid = LATEST.get((dataset, mode))
         if rid and RUNS[rid]["result"] and not RUNS[rid]["result"]["report"].get("not_investigation"):
             rep = RUNS[rid]["result"]["report"]
@@ -356,13 +367,49 @@ def compare(dataset: str):
 
 # ---------------- system status and benchmark ----------------
 @app.get("/api/system")
-def system_status():
-    return {"sandbox": sandbox.status(), "sandbox_image": sandbox.IMAGE}
+def system_status(refresh: bool = False):
+    return {"sandbox": sandbox.status(refresh), "sandbox_image": sandbox.IMAGE}
+
+
+@app.get("/api/security")
+def security_status():
+    return {"controls": security.controls(), "stats": security.STATS,
+            "signing_key": {"key_id": ledger.key_id(config.CAP_SECRET), "source":
+                            "CAP_SECRET env" if config.os.getenv("CAP_SECRET") == config.CAP_SECRET else "data/.signing_key (0600)"},
+            "sandbox": sandbox.status()}
+
+
+# ---------------- threat lab (synopsis Table 7.2) ----------------
+@app.get("/api/threats")
+def threat_catalogue():
+    return threats.catalogue() | {"last": THREAT_LAST}
+
+
+@app.get("/api/threats/run")
+def run_threats(only: str = ""):
+    """Streams one result per attack as it is tried against the real components, then a summary."""
+    classes = [c for c in only.split(",") if c in threats.CLASSES] or None
+    sandbox.status(refresh=True)
+
+    def gen():
+        results = []
+        for r in threats.run_suite(classes):
+            results.append(r)
+            yield f"data: {json.dumps(_plain(r))}\n\n"
+        summary = threats.summarise(results)
+        if not classes:
+            THREAT_LAST.update(results=results, summary=summary, finished_at=time.time(), sandbox=sandbox.status())
+        yield f"event: end\ndata: {json.dumps(_plain(summary))}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/api/benchmark")
 def get_benchmark():
-    return {"state": {k: BENCH[k] for k in ("status", "progress", "error")}, "results": bench_runner.load()}
+    shop = config.ROOT / "benchmarks" / "shopsim_latest.json"
+    return {"state": {k: BENCH[k] for k in ("status", "progress", "error")}, "results": bench_runner.load(),
+            "shopsim": json.loads(shop.read_text()) if shop.exists() else None}
 
 
 class BenchIn(BaseModel):
@@ -407,6 +454,165 @@ def architecture(dataset: str):
     }
 
 
+# ---------------- known answers (datasets with planted incidents) ----------------
+def answer_check(ds: dict, problem: str, report: dict) -> dict | None:
+    """When the problem is one of a dataset's planted incidents, score the report against the answer key."""
+    incidents = ds.get("incidents") or []
+    inc = next((i for i in incidents if i["problem"].strip() == problem.strip()), None)
+    if not inc:
+        return None
+    text = " ".join([report.get("root_cause", ""), report.get("plain_summary", ""), report.get("summary", ""),
+                     " ".join(report.get("key_facts", []))]).lower()
+    missing = [g for g in inc["keywords"] if not any(k in text for k in g)]
+    return {"incident": inc["id"], "title": inc["title"], "cause": inc["cause"], "found": not missing,
+            "missing": [" / ".join(g) for g in missing], "required": inc["required"]}
+
+
+@app.get("/api/datasets/{name}/answers")
+def dataset_answers(name: str):
+    ds = _dataset(name)
+    return {"incidents": ds.get("incidents") or [], "decoys": ds.get("decoys") or [], "generated": ds.get("generated")}
+
+
+# ---------------- data health: quality, PII scan, relationship map, ingest log ----------------
+def _cat_url(name: str):
+    ds = _dataset(name)
+    return catalog_mod.load(ds["catalog"]), ds["url"], ds
+
+
+def _stamp(url: str) -> float:
+    try:
+        u = make_url(url)
+        return Path(u.database).stat().st_mtime if u.drivername.startswith("sqlite") else 0.0
+    except Exception:
+        return 0.0
+
+
+@app.get("/api/datasets/{name}/quality")
+def dataset_quality(name: str):
+    cat, url, _ = _cat_url(name)
+    return _plain(quality.cached(("q", name, _stamp(url)), lambda: quality.profile(cat, url)))
+
+
+@app.get("/api/datasets/{name}/pii")
+def dataset_pii(name: str):
+    cat, url, ds = _cat_url(name)
+    return _plain(quality.cached(("p", name, _stamp(url), ds["catalog"].stat().st_mtime), lambda: quality.pii_scan(cat, url)))
+
+
+class PiiApplyIn(BaseModel):
+    resources: list[str] = Field(max_length=500)
+
+
+@app.post("/api/datasets/{name}/pii/apply")
+def dataset_pii_apply(name: str, body: PiiApplyIn):
+    """Raise the sensitivity of the chosen columns to what the scan suggested (never lowers a label)."""
+    cat, url, ds = _cat_url(name)
+    scan = quality.pii_scan(cat, url)
+    want = {f["resource"]: f["suggested"] for f in scan["findings"] if f["resource"] in body.resources}
+    raw = catalog_mod.load_raw(ds["catalog"])
+    changed = []
+    for res, level in want.items():
+        t, c = res.split(".", 1)
+        meta = raw["tables"][t]["columns"][c]
+        if catalog_mod.LEVELS.index(level) > catalog_mod.LEVELS.index(meta["sensitivity"]):
+            meta["sensitivity"] = level
+            changed.append(res)
+    catalog_mod.save(raw, ds["catalog"])
+    return {"changed": changed}
+
+
+@app.get("/api/datasets/{name}/schema")
+def dataset_schema(name: str):
+    cat, url, _ = _cat_url(name)
+    return _plain(quality.cached(("s", name, _stamp(url)), lambda: quality.schema_map(cat, url)))
+
+
+@app.get("/api/datasets/{name}/ingest-report")
+def dataset_ingest_report(name: str):
+    return ingest_report(name) or {"dataset": name, "tables": [], "note": "no ingest log (built-in or connected dataset)"}
+
+
+# ---------------- background jobs: big uploads and dataset generation ----------------
+JOBS: dict[str, dict] = {}
+
+
+def _job(kind: str, fn) -> str:
+    jid = uuid.uuid4().hex[:10]
+    job = {"id": jid, "kind": kind, "status": "running", "message": "Starting…", "progress": 0.0, "result": None,
+           "error": None, "started": time.time()}
+    JOBS[jid] = job
+
+    def step(msg: str, frac: float):
+        job.update(message=msg, progress=round(min(1.0, max(job["progress"], frac)), 3))
+
+    def work():
+        try:
+            job["result"] = _plain(fn(step))
+            job.update(status="done", progress=1.0, message="Done")
+        except Exception as e:
+            job.update(status="error", error=str(e)[:400])
+        finally:
+            job["seconds"] = round(time.time() - job["started"], 1)
+
+    threading.Thread(target=work, daemon=True).start()
+    return jid
+
+
+@app.get("/api/jobs/{jid}")
+def get_job(jid: str):
+    if jid not in JOBS:
+        raise HTTPException(404, "unknown job")
+    return JOBS[jid]
+
+
+@app.post("/api/datasets/shopsim")
+def generate_shopsim(scale: float = 1.0):
+    if not 0.01 <= scale <= 1.0:
+        raise HTTPException(400, "scale must be between 0.01 and 1")
+    if any(j["kind"] == "shopsim" and j["status"] == "running" for j in JOBS.values()):
+        raise HTTPException(409, "ShopSim is already being generated")
+    return {"job": _job("shopsim", lambda step: shopsim.build(scale, progress=step))}
+
+
+@app.post("/api/datasets/upload-stream")
+async def upload_stream(files: list[UploadFile] = File(...), name: str = Form(...), label: str = Form(""),
+                        currency: str = Form("INR"), describe: bool = Form(True), model: str = Form("")):
+    """Big-file upload: each file is streamed to disk in 1 MB pieces (never held in memory), then loaded in
+    the background (CSV in chunks) while the client polls /api/jobs/{id} for progress."""
+    tmp = config.ROOT / "data" / "datasets" / f".upload_{slug(name)}_{uuid.uuid4().hex[:6]}"
+    tmp.mkdir(parents=True, exist_ok=True)
+    paths, limit = [], security.MAX_BODY_MB * 1024 * 1024
+    for f in files:
+        ext = Path(f.filename or "").suffix.lower()
+        if ext not in SUPPORTED:
+            raise HTTPException(400, f"unsupported file type {ext or '(none)'}")
+        dest = tmp / Path(f.filename).name
+        written = 0
+        with dest.open("wb") as out:
+            while chunk := await f.read(1024 * 1024):
+                written += len(chunk)
+                if written > limit:
+                    raise HTTPException(413, f"{f.filename} is over {security.MAX_BODY_MB} MB")
+                out.write(chunk)
+        paths.append(dest)
+
+    def run(step):
+        try:
+            url, tables = ingest(paths, name, progress=lambda m, fr: step(m, 0.05 + 0.6 * fr))
+            step("Labelling sensitivity, writing descriptions, finding problems", 0.7)
+            result = onboard(name, label or name, url, currency, _llm(model), describe,
+                             progress=lambda m: step(m, 0.8))
+            return {"dataset": result["name"], "tables": {t: {"rows": r, "columns": c} for t, (r, c) in tables.items()},
+                    "problems": result["problems"]}
+        finally:
+            for p in paths:
+                p.unlink(missing_ok=True)
+            tmp.rmdir()
+
+    return {"job": _job("upload", run)}
+
+
 _load_saved_runs()
 
 # ---------------- frontend ----------------
@@ -416,8 +622,8 @@ if (DIST / "assets").exists():
 
 @app.get("/{path:path}", include_in_schema=False)
 def spa(path: str):
-    target = DIST / path
-    if path and target.is_file():
+    target = (DIST / path).resolve()
+    if path and target.is_file() and target.is_relative_to(DIST.resolve()):
         return FileResponse(target)
     if (DIST / "index.html").exists():  # never cache the shell, so a new build is picked up immediately
         return FileResponse(DIST / "index.html", headers={"Cache-Control": "no-cache"})

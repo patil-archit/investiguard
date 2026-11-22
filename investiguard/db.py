@@ -41,6 +41,21 @@ def run_readonly(sql: str, url: str = config.DATABASE_URL) -> pd.DataFrame:
         elif backend == "mysql":
             conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
             conn.execute(text(f"SET SESSION max_execution_time = {config.GATEWAY_TIMEOUT_S * 1000}"))
-        df = pd.read_sql_query(text(sql), conn)
+        elif backend == "sqlite":
+            # SQLite has no statement timeout: abort from a progress callback once the budget is spent.
+            import time as _t
+            deadline = _t.monotonic() + config.GATEWAY_TIMEOUT_S
+            raw = conn.connection.driver_connection
+            raw.set_progress_handler(lambda: 1 if _t.monotonic() > deadline else 0, 20_000)
+        try:
+            df = pd.read_sql_query(text(sql), conn)
+        except Exception as e:
+            if "interrupted" in str(e).lower():
+                raise TimeoutError(f"query exceeded the {config.GATEWAY_TIMEOUT_S}s gateway timeout; "
+                                   "aggregate with GROUP BY on indexed columns and avoid large joins") from e
+            raise
+        finally:
+            if backend == "sqlite":
+                conn.connection.driver_connection.set_progress_handler(None, 0)
         conn.rollback()
     return df

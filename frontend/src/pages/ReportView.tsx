@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { ChevronRight, FileSearch, Fingerprint, Info, ScrollText, ShieldCheck, TriangleAlert } from 'lucide-react'
-import { BotMark as Bot } from '../components/brand'
+import { BotMark as Bot, C, Mascot, Sticker } from '../components/brand'
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { EvidenceNode, Investigation } from '../api'
@@ -25,25 +25,38 @@ export default function ReportView({ inv }: { inv: Investigation }) {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* plain words */}
-      <section className="card overflow-hidden">
-        <div className={clsx('border-l-[3px] px-7 py-6', direct ? 'border-warn' : 'border-accent')}>
-          <div className={clsx('eyebrow', direct ? 'text-warn' : 'text-accent')}>{direct ? "The AI's own conclusion" : 'Conclusion in plain words'}</div>
-          <p className="mt-3 max-w-4xl text-[19px] font-medium leading-relaxed tracking-[-0.01em] text-fg">{rep.plain_summary}</p>
-          {rep.key_facts.length > 0 && (
-            <ul className="mt-5 grid gap-x-8 gap-y-2 md:grid-cols-2">
-              {rep.key_facts.map(f => (
-                <li key={f} className="flex gap-2.5 text-[13.5px] leading-relaxed text-fg-2">
-                  <span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-fg-2" />{f}
-                </li>
-              ))}
-            </ul>
-          )}
-          {direct
-            ? <p className="mt-5 flex items-start gap-1.5 text-[11.5px] text-warn"><TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
-                Written by the AI from its own reading of the results. No number, claim or verdict here was checked by code.</p>
-            : <p className="mt-5 text-[11.5px] text-subtle">Key numbers are calculated directly from the data by code, not written by the AI.</p>}
-        </div>
+      <section className={clsx('relative overflow-hidden rounded-[26px] px-6 pb-8 pt-8 sm:px-9', direct ? 'bg-tangerine text-paper' : 'bg-good text-paper')}>
+        <Mascot size={150} mood={direct ? 'wow' : 'cool'} head={C.paper} className="absolute -right-6 -top-4 hidden rotate-[12deg] md:block" />
+        <Sticker r={-4} className={direct ? 'bg-ink text-paper' : 'bg-mustard text-ink'}>{direct ? "The AI's own conclusion · unchecked" : 'The answer · checked by code'}</Sticker>
+        <div className="display mt-5 max-w-4xl text-[clamp(26px,3.4vw,46px)]">{rep.root_cause}</div>
+        <p className="mt-4 max-w-3xl text-[16.5px] leading-relaxed text-paper/90">{rep.plain_summary}</p>
+        {rep.key_facts.length > 0 && (
+          <ul className="mt-6 grid gap-2 md:grid-cols-2">
+            {rep.key_facts.map((f, i) => (
+              <li key={f} className="flex animate-fade-in gap-3 rounded-[12px] bg-paper/12 px-4 py-3 text-[13.5px] leading-relaxed" style={{ animationDelay: `${i * 90}ms` }}>
+                <span className="font-display text-[15px] text-mustard">{String(i + 1).padStart(2, '0')}</span>{f}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-5 flex items-start gap-1.5 text-[12px] text-paper/80">
+          {direct ? <><TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" /> Written by the AI from its own reading. No number, claim or verdict here was checked by code.</>
+            : <>Numbers are calculated from the data by code, not written by the AI. {rep.caveat}</>}
+        </p>
       </section>
+
+      {res.answer_check && (
+        <section className={clsx('flex flex-wrap items-start gap-4 rounded-[20px] border-2 p-5', res.answer_check.found ? 'border-good bg-good-soft' : 'border-scarlet bg-bad-soft')}>
+          <span className={clsx('grid h-12 w-12 shrink-0 place-items-center rounded-full font-display text-[22px] text-paper', res.answer_check.found ? 'bg-good' : 'bg-scarlet')}>
+            {res.answer_check.found ? '✓' : '✗'}</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-label text-[10px] font-bold uppercase tracking-[0.12em] text-ink">Answer key · {res.answer_check.incident} · {res.answer_check.title}</div>
+            <div className="display mt-1 text-[22px] text-ink">{res.answer_check.found ? 'The agent found the planted cause' : 'The agent missed the planted cause'}</div>
+            <p className="mt-1 text-[13px] leading-relaxed text-fg-2"><b>What was planted:</b> {res.answer_check.cause}</p>
+            {!res.answer_check.found && <p className="mt-1 text-[12px] text-scarlet">Not mentioned in the report: {res.answer_check.missing.join(', ')}</p>}
+          </div>
+        </section>
+      )}
 
       {/* metrics */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line md:grid-cols-3 xl:grid-cols-6">
@@ -54,6 +67,14 @@ export default function ReportView({ inv }: { inv: Investigation }) {
         <Stat label="Capabilities" value={e.capabilities_issued} hint={`gateway p50 ${e.gateway_p50_ms ?? '–'} ms`} />
         <Stat label="Time" value={`${inv.seconds ?? '–'}s`} hint={direct ? 'Direct AI run' : 'InvestiGuard run'} />
       </div>
+      {!direct && e.overhead_p50_ms != null && (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[18px] border-[1.5px] border-line bg-line md:grid-cols-4">
+          <Stat label="Security overhead p50" value={`${e.overhead_p50_ms} ms`} hint={`p95 ${e.overhead_p95_ms ?? '–'} ms · target ≤ 50 / 150`} tone={(e.overhead_p50_ms ?? 0) <= 50 ? 'good' : 'neutral'} />
+          <Stat label="Overhead share" value={inv.seconds ? pct((e.overhead_total_ms ?? 0) / 1000 / inv.seconds, 2) : '–'} hint="of total time · target < 10%" tone="good" />
+          <Stat label="Policy decisions" value={e.policy_decisions ?? 0} hint={`p50 ${e.policy_p50_ms ?? '–'} ms`} />
+          <Stat label="Evidence faithfulness" value={pct(rep.evidence_faithfulness ?? 1)} hint={`${rep.claims.length} of ${rep.claims_proposed ?? rep.claims.length} claims cite evidence`} tone="good" />
+        </div>
+      )}
 
       {/* privilege over time */}
       {res.privilege && res.privilege.curve.length > 2 && (

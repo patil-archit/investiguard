@@ -9,24 +9,28 @@ import Data from './pages/Data'
 import Investigate from './pages/Investigate'
 import Landing from './pages/Landing'
 import { useStore } from './store'
+import { MODE_PLAIN } from './api'
 
 const HowItWorks = lazy(() => import('./pages/HowItWorks'))
 const About = lazy(() => import('./pages/About'))
+const SecurityLab = lazy(() => import('./pages/SecurityLab'))
 
-type AppPage = 'investigate' | 'ask' | 'compare' | 'benchmark' | 'data' | 'how'
+type AppPage = 'investigate' | 'ask' | 'compare' | 'lab' | 'benchmark' | 'data' | 'how'
 export type Page = 'home' | 'about' | AppPage
 const APP_NAV: { id: AppPage; label: string }[] = [
   { id: 'investigate', label: 'Investigate' },
   { id: 'ask', label: 'Ask' },
-  { id: 'compare', label: 'Vs AI' },
+  { id: 'compare', label: 'A vs B vs C' },
+  { id: 'lab', label: 'Security lab' },
   { id: 'benchmark', label: 'Benchmark' },
   { id: 'data', label: 'Data' },
-  { id: 'how', label: 'How it works' },
+  { id: 'how', label: 'Architecture' },
 ]
 const SITE_NAV: { id: Page; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'about', label: 'Our story' },
-  { id: 'how', label: 'How it works' },
+  { id: 'how', label: 'Architecture' },
+  { id: 'lab', label: 'Security lab' },
   { id: 'benchmark', label: 'Benchmark' },
 ]
 const ALL: Page[] = ['home', 'about', ...APP_NAV.map(n => n.id)]
@@ -65,7 +69,7 @@ export default function App() {
         <>
           <main className="mx-auto max-w-[1320px] px-4 pb-16 pt-28 sm:px-8">
             {loadError && <div className="mb-6"><ErrorNote error={loadError} /></div>}
-            {!dataset && !loadError && page !== 'data' && page !== 'how' && page !== 'benchmark' ? (
+            {!dataset && !loadError && page !== 'data' && page !== 'how' && page !== 'benchmark' && page !== 'lab' ? (
               <Empty title="Add your first dataset"
                 text="Upload a CSV, Excel, JSON or Parquet file, or connect a database, from the Data page." />
             ) : (
@@ -74,6 +78,7 @@ export default function App() {
                 {page === 'ask' && <Ask />}
                 {page === 'compare' && <Compare />}
                 {page === 'benchmark' && <Benchmark />}
+                {page === 'lab' && <Suspense fallback={<div className="h-96 animate-pulse rounded-[26px] bg-ink" />}><SecurityLab /></Suspense>}
                 {page === 'data' && <Data />}
                 {page === 'how' && <Suspense fallback={<div className="card h-96 animate-pulse" />}><HowItWorks /></Suspense>}
               </div>
@@ -110,13 +115,20 @@ function Toolbar({ page, site }: { page: Page; site: boolean }) {
     <header className={clsx('fixed inset-x-2 top-2 z-50 transition-transform duration-500 ease-[cubic-bezier(.2,.8,.2,1)] sm:inset-x-3 sm:top-3',
       hidden && !open && '-translate-y-[130%]')}>
       <div className="relative flex h-[58px] items-center rounded-[14px] bg-paper/95 pl-5 pr-1.5 shadow-[0_2px_0_rgb(45_42_38/0.08)] backdrop-blur">
-        {/* left: pipe-separated links */}
-        <nav className="hidden flex-1 items-center lg:flex">
+        {/* logo: centred on the site pages, leading in the app (more links there) */}
+        <button onClick={() => go('home')} aria-label="InvestiGuard home"
+          className={clsx(site ? 'lg:absolute lg:left-1/2 lg:-translate-x-1/2 lg:order-2' : 'mr-6 shrink-0')}>
+          <Logo />
+        </button>
+
+        {/* pipe-separated links */}
+        <nav className={clsx('hidden flex-1 items-center lg:flex', site && 'lg:order-1')}>
           {nav.map((n, i) => (
             <span key={n.id} className="flex items-center">
-              {i > 0 && <span className="mx-3 h-4 w-px bg-ink/50" />}
+              {i > 0 && <span className={clsx('h-4 w-px bg-ink/50', site ? 'mx-3' : 'mx-2 xl:mx-3')} />}
               <button onClick={() => go(n.id)}
-                className={clsx('group relative font-label text-[11px] font-bold uppercase tracking-[0.06em] transition',
+                className={clsx('group relative whitespace-nowrap font-label font-bold uppercase tracking-[0.06em] transition',
+                  site ? 'text-[11px]' : 'text-[10.5px] xl:text-[11px]',
                   page === n.id ? 'text-oxblood' : 'text-ink hover:text-oxblood')}>
                 {n.label}
                 <span className={clsx('absolute -bottom-1.5 left-0 h-[2px] bg-oxblood transition-all duration-300',
@@ -126,13 +138,8 @@ function Toolbar({ page, site }: { page: Page; site: boolean }) {
           ))}
         </nav>
 
-        {/* centre: logo */}
-        <button onClick={() => go('home')} className="lg:absolute lg:left-1/2 lg:-translate-x-1/2" aria-label="InvestiGuard home">
-          <Logo />
-        </button>
-
         {/* right */}
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className={clsx('ml-auto flex items-center gap-1.5', site && 'lg:order-3')}>
           {site ? (
             <button onClick={() => go('investigate')}
               className="group hidden h-[46px] items-center gap-2 rounded-[10px] bg-ink px-5 font-label text-[11px] font-bold uppercase tracking-[0.08em] text-paper transition hover:bg-oxblood sm:flex">
@@ -142,7 +149,7 @@ function Toolbar({ page, site }: { page: Page; site: boolean }) {
             <label className="relative hidden h-[46px] items-center rounded-[10px] bg-ink pl-4 pr-9 text-paper transition hover:bg-oxblood sm:flex">
               <span className="mr-2 font-label text-[9.5px] font-bold uppercase tracking-[0.1em] text-blush">Data</span>
               <select value={dataset?.name ?? ''} onChange={e => setDataset(e.target.value)}
-                className="max-w-[220px] appearance-none truncate bg-transparent font-label text-[11px] font-bold uppercase tracking-[0.04em] text-paper outline-none">
+                className="max-w-[150px] appearance-none truncate xl:max-w-[220px] bg-transparent font-label text-[11px] font-bold uppercase tracking-[0.04em] text-paper outline-none">
                 {datasets.length === 0 && <option value="">No datasets</option>}
                 {datasets.map(d => <option key={d.name} value={d.name} className="text-ink">{d.label}</option>)}
               </select>
@@ -201,10 +208,8 @@ function Drawer({ page, site }: { page: Page; site: boolean }) {
           )}
           <div>
             <div className="label">Mode</div>
-            <Segmented value={mode} onChange={setMode} options={[{ id: 'C', label: 'InvestiGuard' }, { id: 'A', label: 'Direct AI' }]} />
-            <p className="mt-2 max-w-[260px] text-[12px] leading-snug text-muted">
-              {mode === 'C' ? 'Tests hypotheses one by one, each with only the columns it needs.' : 'Baseline: the AI looks for the reason itself, with every column open and no checks.'}
-            </p>
+            <Segmented value={mode} onChange={setMode} options={[{ id: 'C', label: 'C · Ours' }, { id: 'B', label: 'B · Static' }, { id: 'A', label: 'A · Direct' }]} />
+            <p className="mt-2 max-w-[280px] text-[12px] leading-snug text-muted">{MODE_PLAIN[mode]}</p>
           </div>
           {mode === 'C' && (
             <div className="max-w-[260px]">

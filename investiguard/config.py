@@ -9,7 +9,33 @@ load_dotenv(ROOT / ".env")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'demo_data' / 'demo.db'}")
 CATALOG_PATH = Path(os.getenv("CATALOG_PATH", ROOT / "catalog.yaml"))
 LLM_MODEL = os.getenv("LLM_MODEL", "openai:gpt-4o-mini")
-CAP_SECRET = os.getenv("CAP_SECRET", "dev-only-insecure-secret-change-me-in-env-0001")
+LEGACY_DEV_SECRET = "dev-only-insecure-secret-change-me-in-env-0001"
+
+
+def _signing_secret() -> str:
+    """The key that signs capability tokens and access receipts.
+
+    Taken from CAP_SECRET if set; otherwise a random 256-bit key is generated once and kept in
+    data/.signing_key (owner read/write only). Never the hard-coded development string."""
+    env = os.getenv("CAP_SECRET")
+    if env and env != LEGACY_DEV_SECRET and len(env) >= 32:
+        return env
+    import secrets
+
+    path = ROOT / "data" / ".signing_key"
+    try:
+        if path.exists() and len(path.read_text().strip()) >= 32:
+            return path.read_text().strip()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        key = secrets.token_hex(32)
+        path.write_text(key)
+        path.chmod(0o600)
+        return key
+    except OSError:
+        return secrets.token_hex(32)  # read-only disk: per-process key
+
+
+CAP_SECRET = _signing_secret()
 DATASETS_PATH = ROOT / "datasets.yaml"
 
 

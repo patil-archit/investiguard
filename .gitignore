@@ -10,3 +10,7 @@ data/inventory_movements.csv
 .DS_Store
 data/bench/
 data/runs/
+data/.signing_key
+data/shopsim.db
+data/shopsim.tmp.db
+data/datasets/

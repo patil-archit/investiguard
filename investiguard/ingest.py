@@ -8,6 +8,7 @@ dict of record lists), .jsonl/.ndjson, .parquet, and SQLite files (.db .sqlite .
 import argparse
 import csv
 import json
+import time
 import re
 import sqlite3
 from pathlib import Path
@@ -90,14 +91,23 @@ def read_tables(path: Path) -> dict[str, pd.DataFrame]:
         con.close()
 
 
-def clean(df: pd.DataFrame) -> pd.DataFrame:
-    """SQL-safe unique column names, empty columns dropped, dates stored as sortable ISO text."""
+def clean(df: pd.DataFrame, log: list | None = None) -> pd.DataFrame:
+    """SQL-safe unique column names, empty columns dropped, dates stored as sortable ISO text.
+
+    Every change is appended to `log` (when given) so the analyst can see exactly what was done to the data."""
+    log = log if log is not None else []
+    empty = [str(c) for c in df.columns if df[c].isna().all()]
+    if empty:
+        log.append({"action": "dropped empty columns", "columns": empty[:20], "count": len(empty)})
     df = df.dropna(axis=1, how="all").copy()
     names, seen = [], {}
     for i, c in enumerate(df.columns):
         n = slug(c) if str(c).strip() and not str(c).startswith("Unnamed") else f"col_{i + 1}"
         seen[n] = seen.get(n, 0) + 1
         names.append(n if seen[n] == 1 else f"{n}_{seen[n]}")
+    renamed = [[str(a), b] for a, b in zip(df.columns, names) if str(a) != b]
+    if renamed:
+        log.append({"action": "renamed columns to SQL-safe names", "pairs": renamed[:30], "count": len(renamed)})
     df.columns = names
     for c in df.columns:
         s = df[c]
@@ -110,8 +120,10 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
                 parsed = pd.to_datetime(s, errors="coerce", dayfirst=not sample.str.match(r"^\d{4}").all())
                 if parsed.notna().sum() >= 0.9 * s.notna().sum():
                     df[c] = _iso(parsed)
+                    log.append({"action": "converted to ISO dates", "columns": [c]})
             elif sample.map(lambda v: isinstance(v, (dict, list))).any():
                 df[c] = s.map(lambda v: json.dumps(v) if isinstance(v, (dict, list)) else v)
+                log.append({"action": "stored nested values as JSON text", "columns": [c]})
     return df
 
 
@@ -120,27 +132,105 @@ def _iso(s: pd.Series) -> pd.Series:
     return s.dt.strftime("%Y-%m-%d %H:%M:%S" if has_time else "%Y-%m-%d")
 
 
-def ingest(paths: list[Path], name: str) -> tuple[str, dict[str, tuple[int, int]]]:
-    """Load files into data/datasets/<name>.db (replacing it). Returns (sqlite url, {table: (rows, cols)})."""
+BIG_FILE_MB = 40          # CSVs larger than this are loaded in chunks, never whole into memory
+CHUNK_ROWS = 200_000
+
+
+def _ingest_csv_chunked(path: Path, table: str, eng, log: list, progress) -> tuple[int, int]:
+    """Stream a large CSV into SQLite chunk by chunk. The first chunk decides names and date columns."""
+    raw = path.open("rb").read(65536)
+    enc = "utf-8-sig"
+    try:
+        sample = raw.decode(enc)
+    except UnicodeDecodeError:
+        enc, sample = "latin-1", raw.decode("latin-1")
+    try:
+        sep = csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+    except csv.Error:
+        sep = "\t" if path.suffix.lower() == ".tsv" else ","
+    size, rows, names, dates, ncols = path.stat().st_size, 0, None, [], 0
+    reader = pd.read_csv(path, sep=sep, encoding=enc, chunksize=CHUNK_ROWS, low_memory=False)
+    for i, chunk in enumerate(reader):
+        if names is None:
+            first_log: list = []
+            cleaned = clean(chunk, first_log)
+            log += first_log
+            names = dict(zip(chunk.columns, cleaned.columns))
+            dates = [c for e in first_log if e["action"] == "converted to ISO dates" for c in e["columns"]]
+            chunk, ncols = cleaned, len(cleaned.columns)
+        else:
+            chunk = chunk[[c for c in chunk.columns if c in names]].rename(columns=names)
+            for c in dates:
+                raw_c = chunk[c].dropna().astype(str)
+                chunk[c] = _iso(pd.to_datetime(chunk[c], errors="coerce", dayfirst=not raw_c.str.match(r"^\d{4}").all()))
+        chunk.to_sql(table, eng, if_exists="replace" if i == 0 else "append", index=False, chunksize=20_000)
+        rows += len(chunk)
+        progress(f"Loading {table}: {rows:,} rows", min(0.95, rows * 120 / max(size, 1)))
+    log.append({"action": f"streamed in chunks of {CHUNK_ROWS:,} rows (large file)", "columns": []})
+    return rows, ncols
+
+
+def _index_dates(eng, table: str, columns: list[str]) -> list[str]:
+    made = []
+    with eng.begin() as con:
+        for c in columns:
+            if _DATE_NAME.search(c) or c.endswith("_id") or c == "id":
+                con.exec_driver_sql(f'CREATE INDEX IF NOT EXISTS "ix_{table}_{c}" ON "{table}" ("{c}")')
+                made.append(c)
+    return made
+
+
+def ingest(paths: list[Path], name: str, progress=lambda msg, frac: None) -> tuple[str, dict[str, tuple[int, int]]]:
+    """Load files into data/datasets/<name>.db (replacing it). Returns (sqlite url, {table: (rows, cols)}).
+
+    A report of every cleaning step is written next to the database (see ingest_report)."""
+    t0 = time.time()
     DATASETS_DIR.mkdir(parents=True, exist_ok=True)
     db_path = DATASETS_DIR / f"{slug(name)}.db"
     db_path.unlink(missing_ok=True)
     eng = create_engine(f"sqlite:///{db_path}")
-    summary = {}
+    summary, report = {}, []
     for path in map(Path, paths):
+        progress(f"Reading {path.name}", 0.05)
+        big = path.suffix.lower() in (".csv", ".tsv", ".txt") and path.stat().st_size > BIG_FILE_MB * 1024 * 1024
+        if big:
+            table, log = slug(path.stem), []
+            if table in summary:
+                table = f"{table}_{slug(path.stem)}"
+            rows, ncols = _ingest_csv_chunked(path, table, eng, log, progress)
+            cols = list(pd.read_sql_query(f'SELECT * FROM "{table}" LIMIT 1', eng).columns)
+            summary[table] = (rows, ncols)
+            report.append({"table": table, "source": path.name, "rows": rows, "columns": ncols, "duplicates": None,
+                           "actions": log, "indexed": _index_dates(eng, table, cols), "bytes": path.stat().st_size})
+            continue
         for table, df in read_tables(path).items():
-            df = clean(df)
+            log: list = []
+            df = clean(df, log)
             if df.empty:
                 continue
             if table in summary:  # two files produced the same table name: keep both
                 table = f"{table}_{slug(path.stem)}"
+            dups = int(df.duplicated().sum())
+            if dups:
+                log.append({"action": "found exact duplicate rows (kept, not deleted)", "columns": [], "count": dups})
+            progress(f"Writing {table} ({len(df):,} rows)", 0.5)
             df.to_sql(table, eng, if_exists="replace", index=False, chunksize=10_000)
             summary[table] = (len(df), len(df.columns))
+            report.append({"table": table, "source": path.name, "rows": len(df), "columns": len(df.columns),
+                           "duplicates": dups, "actions": log, "indexed": _index_dates(eng, table, list(df.columns)),
+                           "bytes": path.stat().st_size})
     eng.dispose()
     if not summary:
         db_path.unlink(missing_ok=True)
         raise ValueError("no non-empty tables found in the uploaded files")
+    (DATASETS_DIR / f"{slug(name)}.report.json").write_text(json.dumps(
+        {"dataset": slug(name), "seconds": round(time.time() - t0, 2), "tables": report}, default=str))
     return f"sqlite:///{db_path}", summary
+
+
+def ingest_report(name: str) -> dict | None:
+    p = DATASETS_DIR / f"{slug(name)}.report.json"
+    return json.loads(p.read_text()) if p.exists() else None
 
 
 def ingest_uploads(files: list[tuple[str, bytes]], name: str) -> tuple[str, dict]:

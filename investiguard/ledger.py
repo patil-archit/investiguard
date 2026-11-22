@@ -36,14 +36,21 @@ def _sign(run_id: str, root: str, n: int, secret: str) -> str:
     return hmac.new(secret.encode(), f"{run_id}|{root}|{n}".encode(), hashlib.sha256).hexdigest()
 
 
+def key_id(secret: str) -> str:
+    """Public fingerprint of the signing key, so a receipt says which key sealed it (never the key)."""
+    return hashlib.sha256(b"ig-key-id|" + secret.encode()).hexdigest()[:12]
+
+
 def seal(run_id: str, events: list[dict], secret: str = config.CAP_SECRET) -> dict:
     hashes = chain(events)
     root = hashes[-1] if hashes else GENESIS
     return {"run_id": run_id, "entries": len(events), "root_hash": root, "algorithm": "SHA-256 chain + HMAC-SHA256",
-            "sealed_at": time.time(), "signature": _sign(run_id, root, len(events), secret)}
+            "sealed_at": time.time(), "key_id": key_id(secret), "signature": _sign(run_id, root, len(events), secret)}
 
 
 def verify(events: list[dict], receipt: dict, secret: str = config.CAP_SECRET) -> dict:
+    if "key_id" not in receipt:   # sealed before per-install keys existed
+        secret = config.LEGACY_DEV_SECRET
     hashes = chain(events)
     root = hashes[-1] if hashes else GENESIS
     checks = {

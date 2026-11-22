@@ -21,6 +21,10 @@ Two further terms are reported with every verdict:
                    (median / MAD), so "everything fell about the same" scores low
   confidence     = 0.5 E + 0.25 min(lift/3, 1) + 0.25 min(|z|/3, 1)
 
+The synopsis evidence score is reported alongside (section 5.3d):
+  Score = 0.5 E + 0.3 S + 0.2 T     S = 1 - p (two-sided, from z)   T = temporal alignment from the onset
+  drill-down (1 clear step specific to the segment, 0.5 unknown or shared, 0 no clear step)
+
 Drill-downs on a supported segment use two more fixed shapes, also scored here:
   price_volume()  segment | baseline | incident | baseline_qty | incident_qty   -> price vs volume effect
   onset()         period | segment_value | total_value                          -> when the change began (T)
@@ -49,6 +53,35 @@ def normalise(df: pd.DataFrame) -> tuple[pd.DataFrame | None, str | None]:
         return None, "result must include a row with segment = 'ALL' holding the overall metric for both periods"
     if len(out) < 2:
         return None, "result must include at least one driver segment besides 'ALL'"
+    # A driver must exist in both periods. If almost all of the baseline sits in segments that are empty in the
+    # incident period and vice versa, the "segments" are the periods themselves (e.g. a month column), and the
+    # test would trivially "explain" 100% of the change. Send it back instead of supporting a tautology.
+    segs = out[out["segment"].str.upper() != "ALL"]
+    b_tot, i_tot = segs["baseline"].abs().sum(), segs["incident"].abs().sum()
+    if b_tot > 0 and i_tot > 0:
+        only_b = segs.loc[segs["incident"] == 0, "baseline"].abs().sum() / b_tot
+        only_i = segs.loc[segs["baseline"] == 0, "incident"].abs().sum() / i_tot
+        if only_b > 0.8 and only_i > 0.8:
+            return None, ("the segments are the two periods themselves (each segment has a value in only one period); "
+                          "group by a driver column that exists in both periods (region, channel, product, ...), never "
+                          "by the date or month")
+    # A segment that exists in only one period and carries (nearly) that whole period's total is the period
+    # itself under another name (e.g. 'September'), not a driver.
+    all_r = out[out["segment"].str.upper() == "ALL"].iloc[0]
+    for r in segs.itertuples():
+        whole_i = r.baseline == 0 and abs(all_r["incident"]) > 0 and abs(r.incident) >= 0.9 * abs(all_r["incident"])
+        whole_b = r.incident == 0 and abs(all_r["baseline"]) > 0 and abs(r.baseline) >= 0.9 * abs(all_r["baseline"])
+        if whole_i or whole_b:
+            return None, (f"segment '{r.segment}' holds the whole of one period and nothing in the other, so it is the "
+                          "period, not a driver; group by a column whose values exist in both periods")
+    # Segments must be parts of the ALL metric, in the same unit. Counts of failed payments against a revenue
+    # total, say, are a different measure: the engine would wrongly reject (or support) the hypothesis.
+    if b_tot > 0 or i_tot > 0:
+        ab, ai = abs(float(all_r["baseline"])), abs(float(all_r["incident"]))
+        if ab > 0 and ai > 0 and b_tot < 0.02 * ab and i_tot < 0.02 * ai and (ab > 1000 or ai > 1000):
+            return None, ("the segment values are tiny next to the ALL row, so they are probably a different measure "
+                          "(e.g. a count against a revenue total); compute the SAME metric as the ALL row for each value "
+                          "of the driver column, e.g. SUM(amount) of completed orders grouped by payments.provider")
     # Segments are a partition (or, for a loss-type driver, a subset) of the metric, so they can never add
     # up to more than the ALL row. If they do, the ALL row or the segment filters are wrong.
     is_all = out["segment"].str.upper() == "ALL"
@@ -124,9 +157,11 @@ def score(df: pd.DataFrame) -> dict:
     lift_term = min((lift if lift != float("inf") else 3) / 3, 1)
     confidence = 0.0 if verdict != "SUPPORTED" else round(
         0.5 * share + 0.25 * lift_term + 0.25 * (min(abs(z) / 3, 1) if z is not None else lift_term), 2)
+    parts = score_parts(share if verdict != "INCONCLUSIVE" or not relabel else 0.0, z)
     ranked = segs.reindex(segs["delta"].abs().sort_values(ascending=False).index).head(5)
     return {
         "kind": "decomposition", "significance_z": z, "confidence": confidence,
+        "score_parts": parts, "evidence_score": combined(parts),
         "verdict": verdict, "reason": why, "explained_share": round(share, 3),
         "top_segment": str(top["segment"]), "driver_delta": round(top_delta, 2),
         "total_baseline": round(total_b, 2), "total_incident": round(total_i, 2),
@@ -136,6 +171,22 @@ def score(df: pd.DataFrame) -> dict:
         "top_movers": [{"segment": r.segment, "baseline": round(r.baseline, 2), "incident": round(r.incident, 2),
                         "delta": round(r.delta, 2)} for r in ranked.itertuples()],
     }
+
+
+def score_parts(share: float, z: float | None, t: float = 0.5) -> dict:
+    """E, S and T of the synopsis score. S is 1 - p for a two-sided test of z (0.5 when z is unknown)."""
+    s = math.erf(abs(z) / math.sqrt(2)) if z is not None else 0.5
+    return {"E": round(share, 3), "S": round(s, 3), "T": t}
+
+
+def combined(parts: dict) -> float:
+    return round(0.5 * parts["E"] + 0.3 * parts["S"] + 0.2 * parts["T"], 3)
+
+
+def temporal_alignment(timeline: dict) -> float:
+    if timeline.get("verdict") != "SUPPORTED":
+        return 0.0
+    return 1.0 if timeline.get("specific_to_segment") else 0.5
 
 
 def _significance(segs: pd.DataFrame, top, total_b: float) -> float | None:

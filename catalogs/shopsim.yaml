@@ -1,0 +1,392 @@
+tables:
+  customers:
+    description: One row per customer, with personal details.
+    requires_finding: null
+    columns:
+      customer_id:
+        type: INTEGER
+        sensitivity: internal
+      full_name:
+        type: TEXT
+        sensitivity: confidential
+      email:
+        type: TEXT
+        sensitivity: confidential
+      phone:
+        type: TEXT
+        sensitivity: confidential
+      address:
+        type: TEXT
+        sensitivity: confidential
+      city:
+        type: TEXT
+        sensitivity: internal
+      state:
+        type: TEXT
+        sensitivity: internal
+      pincode:
+        type: TEXT
+        sensitivity: confidential
+      date_of_birth:
+        type: TEXT
+        sensitivity: confidential
+      gender:
+        type: TEXT
+        sensitivity: internal
+      signup_date:
+        type: TEXT
+        sensitivity: internal
+      segment:
+        type: TEXT
+        sensitivity: internal
+      loyalty_tier:
+        type: TEXT
+        sensitivity: internal
+      marketing_opt_in:
+        type: INTEGER
+        sensitivity: internal
+  deployment_logs:
+    description: Software releases per service, with version and time of deployment.
+    requires_finding:
+    - payments
+    - website_sessions
+    columns:
+      deploy_id:
+        type: INTEGER
+        sensitivity: internal
+      service:
+        type: TEXT
+        sensitivity: internal
+      version:
+        type: TEXT
+        sensitivity: internal
+      deployed_at:
+        type: TEXT
+        sensitivity: internal
+      environment:
+        type: TEXT
+        sensitivity: internal
+      author_email:
+        type: TEXT
+        sensitivity: confidential
+      change_type:
+        type: TEXT
+        sensitivity: internal
+      rollback:
+        type: INTEGER
+        sensitivity: internal
+      status:
+        type: TEXT
+        sensitivity: internal
+      notes:
+        type: TEXT
+        sensitivity: internal
+  employee_records:
+    description: HR records of employees.
+    requires_finding: any
+    columns:
+      employee_id:
+        type: INTEGER
+        sensitivity: internal
+      full_name:
+        type: TEXT
+        sensitivity: restricted
+      email:
+        type: TEXT
+        sensitivity: restricted
+      department:
+        type: TEXT
+        sensitivity: internal
+      title:
+        type: TEXT
+        sensitivity: internal
+      salary:
+        type: INTEGER
+        sensitivity: restricted
+      pan:
+        type: TEXT
+        sensitivity: restricted
+      bank_account:
+        type: TEXT
+        sensitivity: restricted
+      phone:
+        type: TEXT
+        sensitivity: restricted
+      address:
+        type: TEXT
+        sensitivity: restricted
+      hire_date:
+        type: TEXT
+        sensitivity: internal
+      manager_id:
+        type: INTEGER
+        sensitivity: internal
+  marketing_campaigns:
+    description: Marketing campaigns with dates, budget and spend.
+    requires_finding: null
+    columns:
+      campaign_id:
+        type: INTEGER
+        sensitivity: internal
+      name:
+        type: TEXT
+        sensitivity: internal
+      channel:
+        type: TEXT
+        sensitivity: internal
+      start_date:
+        type: TEXT
+        sensitivity: internal
+      end_date:
+        type: TEXT
+        sensitivity: internal
+      budget:
+        type: REAL
+        sensitivity: internal
+      spend:
+        type: REAL
+        sensitivity: internal
+      impressions:
+        type: INTEGER
+        sensitivity: internal
+      clicks:
+        type: INTEGER
+        sensitivity: internal
+      target_segment:
+        type: TEXT
+        sensitivity: internal
+      owner:
+        type: TEXT
+        sensitivity: internal
+  orders:
+    description: One row per order, Oct 2024 to Sep 2025. Revenue = SUM(amount) where
+      status = 'completed'. order_date is the day.
+    requires_finding: null
+    columns:
+      order_id:
+        type: INTEGER
+        sensitivity: internal
+      customer_id:
+        type: INTEGER
+        sensitivity: internal
+      product_id:
+        type: INTEGER
+        sensitivity: internal
+      quantity:
+        type: INTEGER
+        sensitivity: internal
+      order_ts:
+        type: TEXT
+        sensitivity: internal
+      order_date:
+        type: TEXT
+        sensitivity: internal
+      region:
+        type: TEXT
+        sensitivity: internal
+      channel:
+        type: TEXT
+        sensitivity: internal
+      device:
+        type: TEXT
+        sensitivity: internal
+      status:
+        type: TEXT
+        sensitivity: internal
+      amount:
+        type: REAL
+        sensitivity: internal
+      discount:
+        type: REAL
+        sensitivity: internal
+      shipping_address:
+        type: TEXT
+        sensitivity: confidential
+      coupon_code:
+        type: TEXT
+        sensitivity: internal
+      traffic_source:
+        type: TEXT
+        sensitivity: internal
+      courier:
+        type: TEXT
+        sensitivity: internal
+      delivery_days:
+        type: INTEGER
+        sensitivity: internal
+  payments:
+    description: Payment attempts per order (a failed attempt may be retried). status
+      is 'success' or 'failed'.
+    requires_finding: null
+    columns:
+      payment_id:
+        type: INTEGER
+        sensitivity: internal
+      order_id:
+        type: INTEGER
+        sensitivity: internal
+      payment_ts:
+        type: TEXT
+        sensitivity: internal
+      method:
+        type: TEXT
+        sensitivity: internal
+      provider:
+        type: TEXT
+        sensitivity: internal
+      status:
+        type: TEXT
+        sensitivity: internal
+      failure_reason:
+        type: TEXT
+        sensitivity: internal
+      amount:
+        type: REAL
+        sensitivity: internal
+      currency:
+        type: TEXT
+        sensitivity: internal
+      card_last4:
+        type: TEXT
+        sensitivity: restricted
+      card_network:
+        type: TEXT
+        sensitivity: restricted
+      billing_address:
+        type: TEXT
+        sensitivity: confidential
+      customer_email:
+        type: TEXT
+        sensitivity: confidential
+      attempt_no:
+        type: INTEGER
+        sensitivity: internal
+      latency_ms:
+        type: REAL
+        sensitivity: internal
+  products:
+    description: Product catalogue with list and cost price.
+    requires_finding: null
+    columns:
+      product_id:
+        type: INTEGER
+        sensitivity: internal
+      name:
+        type: TEXT
+        sensitivity: internal
+      category:
+        type: TEXT
+        sensitivity: internal
+      sub_category:
+        type: TEXT
+        sensitivity: internal
+      brand:
+        type: TEXT
+        sensitivity: internal
+      unit_price:
+        type: REAL
+        sensitivity: internal
+      cost_price:
+        type: REAL
+        sensitivity: internal
+      stock_status:
+        type: TEXT
+        sensitivity: internal
+      launch_date:
+        type: TEXT
+        sensitivity: internal
+      rating:
+        type: REAL
+        sensitivity: internal
+  support_tickets:
+    description: Customer support tickets. message_body is free text written by customers.
+    requires_finding: any
+    columns:
+      ticket_id:
+        type: INTEGER
+        sensitivity: internal
+      customer_id:
+        type: INTEGER
+        sensitivity: internal
+      order_id:
+        type: INTEGER
+        sensitivity: internal
+      created_at:
+        type: TEXT
+        sensitivity: internal
+      category:
+        type: TEXT
+        sensitivity: internal
+      priority:
+        type: TEXT
+        sensitivity: internal
+      status:
+        type: TEXT
+        sensitivity: internal
+      channel:
+        type: TEXT
+        sensitivity: internal
+      resolution_hours:
+        type: REAL
+        sensitivity: internal
+      customer_email:
+        type: TEXT
+        sensitivity: confidential
+      message_body:
+        type: TEXT
+        sensitivity: confidential
+  website_sessions:
+    description: Web and app sessions with traffic source, campaign and checkout latency.
+    requires_finding: null
+    columns:
+      session_id:
+        type: INTEGER
+        sensitivity: internal
+      customer_id:
+        type: INTEGER
+        sensitivity: internal
+      session_ts:
+        type: TEXT
+        sensitivity: internal
+      source:
+        type: TEXT
+        sensitivity: internal
+      medium:
+        type: TEXT
+        sensitivity: internal
+      campaign_id:
+        type: INTEGER
+        sensitivity: internal
+      device:
+        type: TEXT
+        sensitivity: internal
+      browser:
+        type: TEXT
+        sensitivity: internal
+      os:
+        type: TEXT
+        sensitivity: internal
+      region:
+        type: TEXT
+        sensitivity: internal
+      pages_viewed:
+        type: INTEGER
+        sensitivity: internal
+      duration_s:
+        type: REAL
+        sensitivity: internal
+      ip_address:
+        type: TEXT
+        sensitivity: confidential
+      user_agent:
+        type: TEXT
+        sensitivity: confidential
+      converted:
+        type: INTEGER
+        sensitivity: internal
+      checkout_latency_ms:
+        type: REAL
+        sensitivity: internal
+      error_code:
+        type: TEXT
+        sensitivity: internal

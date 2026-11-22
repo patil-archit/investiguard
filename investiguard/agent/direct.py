@@ -1,4 +1,7 @@
-"""Direct AI baseline: one LLM analyst, every column open, no hypotheses.
+"""Direct AI baselines: one LLM analyst, no hypotheses.
+
+System A ("Direct AI"): every column open. System B ("Static sandbox"): only the tables an analyst put on
+an allowlist before the run, every column of those tables open, for the whole run.
 
 The model sees the whole catalogue, runs whatever SELECTs it likes (up to a step budget) and states the
 reason itself. Nothing it concludes is checked by code: there is no policy engine, no per-hypothesis
@@ -68,14 +71,16 @@ def run_direct(problem: str, rt: Runtime, on_event=None) -> dict:
         if on_event:
             on_event(ev)
 
-    # One capability over the whole database for the whole run: that is what "direct" means.
-    cap = rt.store.mint("AI", {c: "clear" for c in cat.all_columns()}, "READ_ROWS",
-                        f"direct analysis: {problem}", config.CAP_TTL_MAX_S)
-    emit("cap_granted", hypothesis="AI", cap_id=cap.cap_id, ttl_s=cap.ttl_s, latency_ms=0, resources={"*": "clear"})
+    # One capability for the whole run: the whole database (A) or the allowlisted tables (B).
+    static = rt.mode == "B" and rt.allow_tables
+    cols = [c for c in cat.all_columns() if not static or c.split(".")[0] in rt.allow_tables]
+    cap = rt.store.mint("AI", {c: "clear" for c in cols}, "READ_ROWS", f"direct analysis: {problem}", config.CAP_TTL_MAX_S)
+    emit("cap_granted", hypothesis="AI", cap_id=cap.cap_id, ttl_s=cap.ttl_s, latency_ms=0,
+         resources={f"{t}.*": "clear" for t in rt.allow_tables} if static else {"*": "clear"})
 
     history: list[dict] = []
     for step in range(1, MAX_STEPS + 1):
-        s = rt.llm.ask(DirectStep, SYSTEM, _step_prompt(problem, cat.describe(), rt.gateway.dialect, history, step))
+        s = rt.llm.ask(DirectStep, SYSTEM, _step_prompt(problem, cat.describe(cols if static else None), rt.gateway.dialect, history, step))
         if s.done or not s.sql.strip():
             emit("direct_step", step=f"Q{step}", thought=s.thought, sql="", done=True)
             break

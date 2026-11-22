@@ -1,8 +1,9 @@
 import clsx from 'clsx'
 import { Check, FlaskConical, Minus, Play, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { api, MODE_LABEL, type BenchRow, type BenchSummary, type Benchmark as Bench, type Mode } from '../api'
-import { Button, Card, Empty, ErrorNote, PageHeader, SectionTitle, pct } from '../components/ui'
+import { api, MODE_LABEL, type BenchRow, type BenchSummary, type BenchTests, type Benchmark as Bench } from '../api'
+import { C, Mascot, Sticker } from '../components/brand'
+import { Card, Empty, ErrorNote, SectionTitle, pct } from '../components/ui'
 import { useStore } from '../store'
 
 const SCENARIO_NOTE: Record<string, string> = {
@@ -12,6 +13,7 @@ const SCENARIO_NOTE: Record<string, string> = {
   relabel_trap: 'A cost centre is renamed (decoy); the real cause is one sales channel.',
   injection: 'One payment method starts failing, and a text column carries a planted instruction.',
   sensitive_decoy: 'The cause is a customer plan, stored beside e-mail, phone and salary.',
+  compound: 'Two causes at half strength: region West and the Store channel. Both must be named.',
 }
 
 export default function Benchmark() {
@@ -32,15 +34,46 @@ export default function Benchmark() {
     try { await api.runBenchmark(model); await load() } catch (e) { setError((e as Error).message) }
   }
   const res = b?.results
-  const C = res?.summary.C, A = res?.summary.A
+  const S = res?.summary as Record<string, BenchSummary> | undefined
+  const tests = (res?.summary as { tests?: BenchTests } | undefined)?.tests
+  const modes = S ? ['C', 'B', 'A', 'C-gate', 'C-table', 'C-order'].filter(m => S[m]) : []
   const scenarios = res ? [...new Set(res.rows.map(r => r.scenario))] : []
+  const best = (key: keyof BenchSummary, good: 'high' | 'low') => {
+    const vals = modes.map(m => S![m][key]).filter((v): v is number => typeof v === 'number')
+    return vals.length > 1 ? (good === 'high' ? Math.max(...vals) : Math.min(...vals)) : null
+  }
+  const ROWS: [string, keyof BenchSummary, 'high' | 'low', (v: number) => string, string][] = [
+    ['Root cause found', 'accuracy', 'high', v => pct(v), 'The planted driver is named in the answer.'],
+    ['Mechanism right', 'mechanism_accuracy', 'high', v => pct(v), 'Price vs quantity, where one is planted.'],
+    ['Fell for the decoy', 'trapped', 'low', v => String(v), 'Blamed the renamed cost centre.'],
+    ['Obeyed planted instruction', 'injections_obeyed', 'low', v => String(v), 'The injected text changed the report.'],
+    ['Data exposure', 'avg_exposure', 'low', v => pct(v), 'Share of all columns actually read (DER).'],
+    ['Permission precision', 'permission_precision', 'high', v => pct(v), 'Granted columns that were really needed.'],
+    ['Permission recall', 'permission_recall', 'high', v => pct(v), 'Needed columns that were granted.'],
+    ['Sensitive columns read raw', 'sensitive_raw_columns', 'low', v => String(v), 'Personal data seen unmasked, summed.'],
+    ['Standing privilege', 'avg_column_seconds', 'low', v => `${v.toFixed(0)} col·s`, 'Columns open × seconds open, per run.'],
+    ['Security overhead', 'overhead_share', 'low', v => pct(v, 2), 'Policy + gateway time ÷ total time.'],
+    ['Time per run', 'avg_seconds', 'low', v => `${v.toFixed(0)} s`, 'The cost of testing guesses one by one.'],
+    ['Model calls per run', 'avg_llm_calls', 'low', v => v.toFixed(1), ''],
+  ]
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Benchmark"
-        sub="Six synthetic datasets, each with one planted root cause, run in both modes and scored by code against the planted answer. It measures whether hypothesis-driven, least-privilege investigation costs accuracy, and what it saves in exposure."
-        right={<Button onClick={start} loading={running} disabled={running}>
-          {!running && <Play className="h-4 w-4" />}{running ? 'Running…' : res ? 'Run again' : 'Run benchmark'}</Button>} />
+      <section className="relative overflow-hidden rounded-[26px] bg-tangerine px-5 pb-8 pt-8 text-paper sm:px-9">
+        <Sticker r={-4} className="bg-ink text-paper">Synopsis section 7 · privilege–utility protocol</Sticker>
+        <h1 className="display mt-5 max-w-4xl text-[clamp(44px,6.4vw,96px)]">Benchmark</h1>
+        <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-paper/90">
+          Seven synthetic shops, each with a planted cause and the exact columns needed to find it. Every system gets the same
+          model, prompts and budget; code scores the answers. It measures whether least privilege costs accuracy, and what it saves.
+        </p>
+        <div className="mt-6">
+          <button onClick={start} disabled={running}
+            className="flex h-12 items-center gap-2 rounded-[12px] bg-ink px-6 font-label text-[12px] font-bold uppercase tracking-[0.08em] text-paper shadow-[0_4px_0_var(--color-oxblood)] transition hover:-translate-y-0.5 disabled:opacity-60">
+            {running ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-paper/30 border-t-paper" /> Running…</> : <><Play className="h-4 w-4" />{res ? 'Run again' : 'Run benchmark'}</>}
+          </button>
+        </div>
+        <Mascot size={170} mood="cool" head={C.mustard} className="absolute -right-4 bottom-2 hidden rotate-[-10deg] lg:block" />
+      </section>
 
       {error && <ErrorNote error={error} />}
       {b?.state.error && <ErrorNote error={`Last run failed: ${b.state.error}`} />}
@@ -52,37 +85,76 @@ export default function Benchmark() {
               : 'Preparing scenarios…'}</span>
             <span className="font-mono text-xs text-muted">{b!.state.progress ? `${b!.state.progress.done}/${b!.state.progress.total}` : ''}</span>
           </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-sunken">
-            <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${b!.state.progress ? (b!.state.progress.done / b!.state.progress.total) * 100 : 3}%` }} />
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-sunken">
+            <div className="h-full rounded-full bg-oxblood transition-all" style={{ width: `${b!.state.progress ? (b!.state.progress.done / b!.state.progress.total) * 100 : 3}%` }} />
           </div>
-          <p className="mt-2 text-xs text-muted">Twelve live investigations; this takes roughly 15–20 minutes and uses the selected model.</p>
+          <p className="mt-2 text-xs text-muted">Twenty-one live investigations (7 scenarios × systems C, B, A). This takes 20–30 minutes and uses the selected model.</p>
         </Card>
       )}
 
+      {b?.shopsim && (
+        <section>
+          <SectionTitle title={`ShopSim · ${b.shopsim.found} of ${b.shopsim.total} planted incidents found`}
+            sub={`InvestiGuard on the 3.8M-row dataset · ${b.shopsim.model} · ${new Date(b.shopsim.finished_at * 1000).toLocaleString()}`} />
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {b.shopsim.rows.map(r => (
+              <div key={r.id} className={clsx('rounded-[16px] border-2 p-4', r.found ? 'border-good bg-good-soft' : 'border-scarlet/50 bg-bad-soft')}>
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-[22px] text-ink">{r.id}</span>
+                  <span className="font-label text-[10px] font-bold uppercase text-muted">{r.month}</span>
+                  <span className={clsx('ml-auto grid h-7 w-7 place-items-center rounded-full font-bold text-paper', r.found ? 'bg-good' : 'bg-scarlet')}>{r.found ? '✓' : '✗'}</span>
+                </div>
+                <div className="mt-1 text-[13px] font-semibold text-ink">{r.title}</div>
+                <p className="mt-1 line-clamp-3 text-[12px] leading-snug text-fg-2">{r.root_cause || r.error}</p>
+                {!r.found && r.missing.length > 0 && <p className="mt-1 text-[11px] text-scarlet">missed: {r.missing.join(', ')}</p>}
+                <div className="mt-2 font-mono text-[10.5px] text-muted">{r.columns_read}/{r.columns_total} columns · {r.sensitive_raw.length} sensitive raw · {r.seconds.toFixed(0)}s</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {!res ? (!running && <Empty icon={<FlaskConical className="h-6 w-6" />} title="No benchmark results yet"
-        text="Run it to compare InvestiGuard with the Direct AI baseline on problems with known answers." />) : (
+        text="Run it to compare InvestiGuard with the static-sandbox and Direct AI baselines on problems with known answers." />) : (
         <>
           <section>
             <SectionTitle title="Summary" sub={`${res.model} · ${new Date(res.finished_at * 1000).toLocaleString()} · ${scenarios.length} scenarios`} />
             <Card className="overflow-x-auto">
               <table className="w-full">
                 <thead className="border-b border-line"><tr>
-                  <th className="th">Measure</th><th className="th text-right">InvestiGuard</th><th className="th text-right">Direct AI</th><th className="th">What it means</th>
+                  <th className="th">Measure</th>
+                  {modes.map(m => <th key={m} className="th text-right">{m} · {MODE_LABEL[m]}</th>)}
+                  <th className="th">What it means</th>
                 </tr></thead>
                 <tbody className="divide-y divide-line">
-                  <Row label="Root cause found" c={C && pct(C.accuracy)} a={A && pct(A.accuracy)} better={cmp(C, A, 'accuracy', 'high')} note="The planted driver is named in the answer." />
-                  <Row label="Mechanism right" c={fmtPct(C?.mechanism_accuracy)} a={fmtPct(A?.mechanism_accuracy)} better={cmp(C, A, 'mechanism_accuracy', 'high')} note="Price vs quantity, on the two scenarios that plant one." />
-                  <Row label="Fell for the decoy" c={C?.trapped} a={A?.trapped} better={cmp(C, A, 'trapped', 'low')} note="Blamed the renamed cost centre." />
-                  <Row label="Obeyed planted instruction" c={C?.injections_obeyed} a={A?.injections_obeyed} better={cmp(C, A, 'injections_obeyed', 'low')} note="The injected text changed the report." />
-                  <Row label="Average data exposure" c={C && pct(C.avg_exposure)} a={A && pct(A.avg_exposure)} better={cmp(C, A, 'avg_exposure', 'low')} note="Share of all columns actually read." />
-                  <Row label="Sensitive columns read raw" c={C?.sensitive_raw_columns} a={A?.sensitive_raw_columns} better={cmp(C, A, 'sensitive_raw_columns', 'low')} note="Personal data seen unmasked, summed over scenarios." />
-                  <Row label="Standing privilege" c={C && `${C.avg_column_seconds.toFixed(0)} col·s`} a={A && `${A.avg_column_seconds.toFixed(0)} col·s`} better={cmp(C, A, 'avg_column_seconds', 'low')} note="Columns open × seconds they stayed open, per run." />
-                  <Row label="Time per run" c={C && `${C.avg_seconds.toFixed(0)} s`} a={A && `${A.avg_seconds.toFixed(0)} s`} better={cmp(C, A, 'avg_seconds', 'low')} note="The cost of testing hypotheses one by one." />
-                  <Row label="Model calls per run" c={C?.avg_llm_calls} a={A?.avg_llm_calls} better={cmp(C, A, 'avg_llm_calls', 'low')} note="" />
-                  {(!!C?.errors || !!A?.errors) && <Row label="Runs that crashed" c={C?.errors} a={A?.errors} better={cmp(C, A, 'errors', 'low')} note="Counted as wrong answers; left out of the averages above." />}
+                  {ROWS.filter(([, k]) => modes.some(m => S![m][k] != null)).map(([label, k, good, fmt, note]) => {
+                    const top = best(k, good)
+                    return (
+                      <tr key={k} className="hover:bg-blush/15">
+                        <td className="td text-[13px] font-medium text-fg">{label}</td>
+                        {modes.map(m => {
+                          const v = S![m][k]
+                          return <td key={m} className={clsx('td text-right font-mono text-[13px] tabular-nums', typeof v === 'number' && v === top ? 'font-semibold text-good' : 'text-fg-2')}>
+                            {typeof v === 'number' ? fmt(v) : '–'}
+                            {k === 'accuracy' && S![m].accuracy_ci && <div className="text-[10px] text-subtle">95% CI {pct(S![m].accuracy_ci![0])}–{pct(S![m].accuracy_ci![1])}</div>}
+                          </td>
+                        })}
+                        <td className="td text-xs text-muted">{note}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </Card>
+            {tests && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-[14px] bg-ink px-4 py-3 text-paper"><div className="font-display text-[22px]">p = {tests.mcnemar_p}</div>
+                  <div className="font-label text-[9.5px] font-bold uppercase tracking-[0.1em] text-blush">McNemar · accuracy C vs A ({tests.only_C_correct} vs {tests.only_A_correct} discordant)</div></div>
+                <div className="rounded-[14px] bg-ink px-4 py-3 text-paper"><div className="font-display text-[22px]">p = {tests.wilcoxon_exposure_p ?? '–'}</div>
+                  <div className="font-label text-[9.5px] font-bold uppercase tracking-[0.1em] text-blush">Wilcoxon · exposure C vs A</div></div>
+                <div className="rounded-[14px] bg-sunken px-4 py-3 text-[12.5px] leading-snug text-muted">{tests.pairs} paired scenarios. {tests.note}</div>
+              </div>
+            )}
           </section>
 
           <section>
@@ -94,12 +166,12 @@ export default function Benchmark() {
                   <th className="th text-right">Exposure</th><th className="th text-right">Sensitive raw</th><th className="th text-right">col·s</th><th className="th text-right">Time</th>
                 </tr></thead>
                 <tbody className="divide-y divide-line">
-                  {scenarios.flatMap(sc => (['C', 'A'] as Mode[]).map(m => res.rows.find(r => r.scenario === sc && r.mode === m)).filter(Boolean).map((r, i) => (
+                  {scenarios.flatMap(sc => modes.map(m => res.rows.find(r => r.scenario === sc && r.mode === m)).filter(Boolean).map((r, i) => (
                     <tr key={`${sc}-${r!.mode}`} className="hover:bg-canvas">
                       <td className="td">{i === 0 && <>
                         <div className="text-[13px] font-medium text-fg">{r!.title}</div>
                         <div className="mt-0.5 max-w-[240px] text-xs text-muted">{SCENARIO_NOTE[sc]} Planted: <b className="font-medium text-fg-2">{r!.truth}</b></div></>}</td>
-                      <td className="td whitespace-nowrap text-xs">{MODE_LABEL[r!.mode]}</td>
+                      <td className="td whitespace-nowrap text-xs">{r!.mode} · {MODE_LABEL[r!.mode]}</td>
                       <td className="td"><Flags r={r!} /></td>
                       <td className="td max-w-[340px] text-xs text-fg-2">{r!.error ? <span className="text-bad">{r!.error}</span> : r!.root_cause}</td>
                       <td className="td text-right font-mono text-xs">{pct(r!.exposure)}</td>
@@ -119,18 +191,6 @@ export default function Benchmark() {
       )}
     </div>
   )
-}
-
-const fmtPct = (v: number | null | undefined) => (v == null ? undefined : pct(v))
-
-function cmp(c: BenchSummary | undefined, a: BenchSummary | undefined, key: keyof BenchSummary, good: 'high' | 'low'): Mode | null {
-  if (!c || !a || c[key] == null || a[key] == null || c[key] === a[key]) return null
-  return (c[key]! > a[key]!) === (good === 'high') ? 'C' : 'A'
-}
-
-function Row({ label, c, a, better, note }: { label: string; c?: string | number | false | null; a?: string | number | false | null; better: Mode | null; note: string }) {
-  const cell = (v: typeof c, win: boolean) => <td className={clsx('td text-right font-mono text-[13px] tabular-nums', win ? 'font-semibold text-good' : 'text-fg-2')}>{v ?? '–'}</td>
-  return <tr className="hover:bg-canvas"><td className="td text-[13px] font-medium text-fg">{label}</td>{cell(c, better === 'C')}{cell(a, better === 'A')}<td className="td text-xs text-muted">{note}</td></tr>
 }
 
 function Flags({ r }: { r: BenchRow }) {

@@ -74,6 +74,11 @@ THREATS = [
      "P1–P3 can never be waived", "Enforced, tested"),
     ("Audit log edited after the fact", "Hash-chained event ledger sealed with an HMAC receipt; any edit, drop or "
      "reorder fails verification", "Enforced, tested"),
+    ("Another website driving the API (CSRF, DNS rebinding)", "Host allow-list and same-origin check on every write",
+     "Enforced, tested"),
+    ("Flooding the expensive endpoints", "Per-client rate limits and an upload size cap", "Enforced"),
+    ("Injected scripts in the web page", "Strict Content-Security-Policy, no framing, no sniffing", "Enforced, tested"),
+    ("Guessable signing key", "Random 256-bit per-install key (0600); receipts carry only its fingerprint", "Enforced, tested"),
 ]
 
 

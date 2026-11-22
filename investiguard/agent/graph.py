@@ -57,7 +57,7 @@ class InvState(TypedDict, total=False):
 class Runtime:
     catalog: Catalog
     llm: LLM
-    mode: str = "C"                      # "A" unrestricted baseline, "C" InvestiGuard
+    mode: str = "C"                      # "A" unrestricted, "B" static table allowlist, "C" InvestiGuard
     url: str = config.DATABASE_URL
     currency: str = "INR"
     store: CapabilityStore = field(default_factory=CapabilityStore)
@@ -66,9 +66,14 @@ class Runtime:
     approver: Callable[[dict], bool] | None = None
     firewall_hits: list[dict] = field(default_factory=list)
     totals: list[tuple[float, float]] = field(default_factory=list)  # ALL rows of accepted decompositions
+    allow_tables: list[str] = field(default_factory=list)  # System B: the analyst-chosen table allowlist
+    # Ablations (synopsis section 7): switch off one InvestiGuard idea at a time to measure what it buys.
+    ablate: frozenset[str] = frozenset()   # {"no_evidence_gate", "table_scope", "no_priority"}
+    policy_ms: list[float] = field(default_factory=list)   # policy-decision latency, for the overhead metric
+    claims_total: int = 0                                  # claims the report writer made, before the filter
 
     def __post_init__(self):
-        self.policy = AllowAllPolicy(self.catalog) if self.mode == "A" else InvestiGuardPolicy(self.catalog)
+        self.policy = AllowAllPolicy(self.catalog) if self.mode in ("A", "B") else InvestiGuardPolicy(self.catalog)
         self.gateway = self.gateway or Gateway(self.catalog, self.store, self.url)
 
 
@@ -226,6 +231,8 @@ def build_graph(rt: Runtime):
             verdict, share = stats["verdict"], stats["explained_share"]
             finding = f"{out.finding} [evidence engine: {stats['reason']}]"
             h["confidence"] = stats.get("confidence")
+            if stats.get("score_parts"):
+                h["score_parts"], h["evidence_score"] = stats["score_parts"], stats["evidence_score"]
         else:      # event lookup: LLM-judged, corroborating only, never counts toward the stop rule
             verdict, share = out.verdict, 0.0
             finding = f"{out.finding} [event evidence, LLM-judged]"
@@ -238,6 +245,15 @@ def build_graph(rt: Runtime):
                  explained_share=share if verdict == "SUPPORTED" else 0.0)
         hyps[h["id"]] = h
         events = [_event("evidence", evidence=ev), _event("hypothesis_status", hypothesis=dict(h))]
+        if stats and stats.get("kind") == "timeline" and h.get("parent") in hyps:
+            # The onset drill-down fills in T (temporal alignment) of its parent's synopsis score.
+            par = dict(hyps[h["parent"]])
+            pe = next((e for e in state.get("evidence", []) if e["id"] == par.get("evidence_id")), None)
+            if pe and pe.get("stats") and pe["stats"].get("score_parts"):
+                parts = dict(pe["stats"]["score_parts"], T=evidence_mod.temporal_alignment(stats))
+                par["score_parts"], par["evidence_score"] = parts, evidence_mod.combined(parts)
+                hyps[par["id"]] = par
+                events.append(_event("hypothesis_status", hypothesis=dict(par)))
         if verdict == "SUPPORTED" and stats and stats.get("kind") == "decomposition" and not h.get("auto"):
             hyps, more = auto_drills(hyps, h, stats, q["sql"], state["objective"])
             events += more
@@ -255,8 +271,13 @@ def build_graph(rt: Runtime):
         valid_ids = {e["id"] for e in evidence}
         claims = [c.model_dump() for c in rep.claims if c.evidence_ids and set(c.evidence_ids) <= valid_ids]
         dropped = len(rep.claims) - len(claims)
+        rt.claims_total = len(rep.claims)
         out = rep.model_dump() | {"claims": claims, "unsupported_claims_dropped": dropped, "key_facts": facts,
-                                  "done_reason": state.get("done_reason"), "exposure": exposure(rt)}
+                                  "done_reason": state.get("done_reason"), "exposure": exposure(rt),
+                                  "claims_proposed": len(rep.claims),
+                                  "evidence_faithfulness": 1.0 if claims or not rep.claims else 0.0,
+                                  "caveat": "Findings are evidence-backed associations in this data, not proven "
+                                            "causation. Check them against what you know about the business."}
         return {"report": out, "events": [_event("report", report=out)]}
 
     def not_investigation(state: InvState):
@@ -296,7 +317,10 @@ def build_graph(rt: Runtime):
                     "events": [_event("stop", reason=reason, explained=explained)]}
         if explained >= config.STOP_EXPLAINED_SHARE:
             candidates = drill
-        nxt = max(candidates, key=lambda h: h["priority"])
+        if "no_priority" in rt.ablate:   # ablation: test in the order proposed, ignoring privilege cost
+            nxt = min(candidates, key=lambda h: int(h["id"][1:]))
+        else:
+            nxt = max(candidates, key=lambda h: h["priority"])
         return {"current": nxt["id"], "iteration": it, "sql": None, "sql_error": None, "attempts": 0, "stats": None,
                 "events": [_event("plan", hypothesis=nxt["id"], priority=nxt["priority"],
                                   ranking=[(h["id"], h["priority"]) for h in sorted(
@@ -309,7 +333,13 @@ def build_graph(rt: Runtime):
             h["gate_retried"] = True
         supported = [x for x in hyps.values() if x["status"] == "SUPPORTED"]
         granted_sensitive = {r for c in rt.store.caps.values() for r, m in c.resources.items() if m != "clear"}
+        if "table_scope" in rt.ablate:   # ablation: whole tables instead of the declared columns
+            tables = {r.split(".")[0] for r in h["resources"]}
+            h["resources"] = [c for c in cat.all_columns() if c.split(".")[0] in tables
+                              and cat.sensitivity(c) != "restricted"]
+            hyps[h["id"]] = h
         ctx = PolicyContext(
+            evidence_gate="no_evidence_gate" not in rt.ablate,
             declared={x["id"]: x["resources"] for x in hyps.values()},
             supported_tables={r.split(".")[0] for x in supported for r in x["resources"]},
             has_supported_finding=bool(supported),
@@ -321,6 +351,7 @@ def build_graph(rt: Runtime):
         t0 = time.perf_counter()
         d = rt.policy.decide(req, ctx)
         ms = (time.perf_counter() - t0) * 1000
+        rt.policy_ms.append(ms)
         approved = False
         if not d.allow and d.failed_check in ("P4", "P5") and rt.approver:
             # Step-up: the evidence gate and budgets may be waived by the analyst, never by the agent.
@@ -450,7 +481,12 @@ def exposure(rt: Runtime) -> dict[str, Any]:
     sensitive_raw = sorted(c for c in touched if rt.catalog.sensitivity(c) in ("confidential", "restricted")
                            and any(c in q.columns_used and rt.store.caps and
                                    _mode_for(rt, q, c) == "clear" for q in allowed))
-    lat = [q.latency_ms for q in rt.gateway.log]
+    lat = sorted(q.latency_ms for q in rt.gateway.log)
+    pol = sorted(rt.policy_ms)
+    overhead = sorted(lat + pol)
+
+    def pct(xs, p):
+        return round(xs[min(len(xs) - 1, int(p * len(xs)))], 2) if xs else None
     return {
         "columns_touched": touched,
         "columns_total": total,
@@ -458,7 +494,14 @@ def exposure(rt: Runtime) -> dict[str, Any]:
         "sensitive_exposed_raw": sensitive_raw,
         "queries_allowed": len(allowed),
         "queries_denied": sum(q.verdict == "denied" for q in rt.gateway.log),
-        "gateway_p50_ms": round(sorted(lat)[len(lat) // 2], 2) if lat else None,
+        "gateway_p50_ms": pct(lat, .5),
+        "gateway_p95_ms": pct(lat, .95),
+        "policy_p50_ms": pct(pol, .5),
+        "policy_p95_ms": pct(pol, .95),
+        "overhead_p50_ms": pct(overhead, .5),
+        "overhead_p95_ms": pct(overhead, .95),
+        "overhead_total_ms": round(sum(overhead), 1),
+        "policy_decisions": len(pol),
         "capabilities_issued": len(rt.store.caps),
         "injections_blocked": len(rt.firewall_hits),
     }
