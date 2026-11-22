@@ -53,6 +53,8 @@ key, is in **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)**.
 ## ShopSim: a 3.8M-row dataset with eight known problems
 ```bash
 .venv/bin/python -m investiguard.shopsim              # 9 tables, 117 columns, ~3.76M rows, ~20 s
+# or use the prebuilt copy in dataset_release/ (795 MB, xz-compressed in 3 parts):
+sh dataset_release/join.sh                           # rebuilds data/shopsim.db and checks its SHA-256
 .venv/bin/python -m investiguard.bench.shopsim_eval   # investigate all eight incidents and grade the answers
 ```
 The synopsis's synthetic enterprise (customers, products, orders, payments, 2.5M website sessions, campaigns,
